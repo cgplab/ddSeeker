@@ -20,7 +20,7 @@ ddSeeker identifies cellular and molecular identifiers from single cell RNA sequ
 
 ### Example
     java -jar picard.jar FastqToSam F1=read1.fastq.gz F2=read2.fastq.gz O=output.bam
-    ddSeeker\_barcodes.py \*.bam
+    ddSeeker_barcodes.py *.bam
     ddSeeker.py sample1.bam sample1\_tagged.bam -s summary/sample1 -n 10
 
 ### Dependencies
