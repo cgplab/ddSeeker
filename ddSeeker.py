@@ -2,7 +2,7 @@
 
 import time
 import argparse
-from sys import argv, exit
+from sys import argv, exit, stderr
 from os.path import abspath, dirname
 from os.path import join as pjoin
 from numpy import cumsum
@@ -16,7 +16,7 @@ global_alignment = pairwise2.align.globalxs
 _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
 
 def info(*args, **kwargs):
-    print(time.strftime("[%Y-%m-%d %H:%M:%S]"), *args, **kwargs)
+    print(time.strftime("[%Y-%m-%d %H:%M:%S]"), file=stderr, *args, **kwargs)
 
 def hamming_dist(s1, s2):
     """Return the Hamming distance between equal-length sequences
@@ -157,17 +157,15 @@ def main(args):
     try:
         _barcodes = [_.rstrip().split()[0] for _ in open(barcodes_file).readlines()[:96]]
     except FileNotFoundError:
-        print("Error: '{}' file not found.".format(barcodes_file),
+        exit("Error: '{}' file not found.".format(barcodes_file) +\
             "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.")
-        exit(1)
 
-    info("Start analysis:", in_file, "->", out_file)
+    info("Start analysis:", in_file, ">", "stdout" if out_file == "-" else out_file)
     in_bam = pysam.AlignmentFile(in_file, "rb", check_sq=False)
-    out_bam = pysam.AlignmentFile(out_file, "wb", template = in_bam)
-    info("Count total reads:", end=" ")
+    out_bam = pysam.AlignmentFile(out_file, "w" if out_file == "-" else "wb", template = in_bam)
     n_reads = in_bam.count(until_eof=True)//2
     in_bam.reset()
-    print(n_reads)
+    info("Total reads:", n_reads)
 
     info("Get identifiers from R1")
     in_bam_iter = islice(in_bam.fetch(until_eof=True), None, None, 2)
@@ -226,7 +224,7 @@ def parse_args(args):
         "from single cell RNA sequencing experiments"
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("input_bam", help="Merged paired-end uBAM file")
-    parser.add_argument("output_bam", help="Tagged uBAM file")
+    parser.add_argument("-o", "--output-bam", default="-", help="Tagged uBAM file")
     parser.add_argument("-b", "--barcodes-file",
         default=pjoin(dirname(abspath(argv[0])), "barcodes.txt"),
         help="Barcode blocks file")
