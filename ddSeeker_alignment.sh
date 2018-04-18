@@ -29,7 +29,6 @@ pipeline=0
 echo_prefix=
 dropseq_root=$(dirname $0)
 star_executable=STAR
-estimated_num_cells=
 progname=`basename $0`
 
 function usage () {
@@ -44,6 +43,7 @@ Perform Drop-seq tagging, trimming and alignment
 -o <outputdir>      : Where to write output bam.  Default: current directory.
 -t <tmpdir>         : Where to write temporary files.  Default: a new subdirectory in $TMPDIR.
 -s <STAR_path>      : Full path of STAR.  Default: STAR is found via PATH environment variable.
+-d <ddSeeker_path>  : Full path of ddSeeker.  Default: ddSeeker is found via PATH environment variable.
 -p                  : Reduce file I/O by pipeline commands together.  Requires more memory and processing power.
 -e                  : Echo commands instead of executing them.  Cannot use with -p.
 EOF
@@ -75,11 +75,11 @@ while getopts ":d:t:o:pg:r:es:n:" options; do
     d ) dropseq_root=$OPTARG;;
     t ) tmpdir=$OPTARG;;
     o ) outdir=$OPTARG;;
-    n ) estimated_num_cells=$OPTARG;;
     p ) pipeline=1;;
     g ) genomedir=$OPTARG;;
     r ) reference=$OPTARG;;
     s ) star_executable=$OPTARG;;
+    s ) ddseeker_executable=$OPTARG;;
     e ) echo_prefix="echo";;
     h ) usage
           exit 1;;
@@ -98,7 +98,6 @@ fi
 check_set "$dropseq_root" "Drop-seq root" "-d"
 check_set "$genomedir" "Genome directory" "-g"
 check_set "$reference" "Reference fasta"  "-r"
-check_set "$estimated_num_cells" "Estimated num cells" "-n"
 
 if (( $# != 1 ))
 then error_exit "Incorrect number of arguments"
@@ -109,13 +108,14 @@ then tmpdir=`mktemp -d`
      echo "Using temporary directory $tmpdir"
 fi
 
-if [[ "$star_executable" != "STAR" ]]
-then if [[ ! ( -x $star_executable && -f $star_executable ) ]]
-     then error_exit "STAR executable $star_executable passed via -s does not exist or is not executable"
-     fi
-elif which STAR > /dev/null
-then echo > /dev/null
-else error_exit "STAR executable must be on the path"
+if [[ "$star_executable" != "STAR" ]]; then
+    if [[ ! ( -x $star_executable && -f $star_executable ) ]]; then
+        error_exit "STAR executable $star_executable passed via -s does not exist or is not executable"
+    fi
+elif which STAR > /dev/null; then 
+    echo > /dev/null
+else 
+    error_exit "STAR executable must be on the path"
 fi
 
 gene_intervals=$(dirname $reference)/$(basename $reference .fasta).genes.intervals
@@ -136,12 +136,13 @@ tag_cells="${dropseq_root}/TagBamWithReadSequenceExtended SUMMARY=${outdir}/unal
 tag_molecules="${dropseq_root}/TagBamWithReadSequenceExtended SUMMARY=${outdir}/unaligned_tagged_Molecular.bam_summary.txt \
 BASE_RANGE=13-20 BASE_QUALITY=10 BARCODED_READ=1 DISCARD_READ=true TAG_NAME=XM NUM_BASES_BELOW_QUALITY=1"
 
-filter_bam="${dropseq_root}/FilterBAM TAG_REJECT=XQ"
+tag_reads="${ddseeker_executable} -s ${outdir}/unaligned_tagged_summary \ "
+filter_bam="${dropseq_root}/FilterBAM TAG_REJECT=XE"
 
-trim_starting_sequence="${dropseq_root}/TrimStartingSequence OUTPUT_SUMMARY=${outdir}/adapter_trimming_report.txt \
-SEQUENCE=AAGCAGTGGTATCAACGCAGAGTGAATGGG MISMATCHES=0 NUM_BASES=5"
+# trim_starting_sequence="${dropseq_root}/TrimStartingSequence OUTPUT_SUMMARY=${outdir}/adapter_trimming_report.txt \
+# SEQUENCE=AAGCAGTGGTATCAACGCAGAGTGAATGGG MISMATCHES=0 NUM_BASES=5"
 
-trim_poly_a="${dropseq_root}/PolyATrimmer OUTPUT=${tagged_unmapped_bam} OUTPUT_SUMMARY=${outdir}/polyA_trimming_report.txt MISMATCHES=0 NUM_BASES=6"
+# trim_poly_a="${dropseq_root}/PolyATrimmer OUTPUT=${tagged_unmapped_bam} OUTPUT_SUMMARY=${outdir}/polyA_trimming_report.txt MISMATCHES=0 NUM_BASES=6"
 
 # Stage 2: alignment
 sam_to_fastq="java -Xmx500m -jar ${picard_jar} SamToFastq INPUT=${tmpdir}/unaligned_mc_tagged_polyA_filtered.bam"
@@ -162,8 +163,8 @@ then
      $tag_cells OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 | \
        $tag_molecules INPUT=/dev/stdin OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 | \
        $filter_bam INPUT=/dev/stdin OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 | \
-       $trim_starting_sequence INPUT=/dev/stdin OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 | \
-       $trim_poly_a INPUT=/dev/stdin
+       # $trim_starting_sequence INPUT=/dev/stdin OUTPUT=/dev/stdout COMPRESSION_LEVEL=0 | \
+       # $trim_poly_a INPUT=/dev/stdin
 
      # Stage 2
      $sam_to_fastq FASTQ=/dev/stdout | \
@@ -180,11 +181,10 @@ else
      $echo_prefix $tag_cells OUTPUT=$tmpdir/unaligned_tagged_Cell.bam
      $echo_prefix $tag_molecules INPUT=$tmpdir/unaligned_tagged_Cell.bam OUTPUT=$tmpdir/unaligned_tagged_CellMolecular.bam
      $echo_prefix $filter_bam INPUT=$tmpdir/unaligned_tagged_CellMolecular.bam OUTPUT=$tmpdir/unaligned_tagged_filtered.bam
-     $echo_prefix $trim_starting_sequence INPUT=$tmpdir/unaligned_tagged_filtered.bam OUTPUT=$tmpdir/unaligned_tagged_trimmed_smart.bam
-     $echo_prefix $trim_poly_a INPUT=$tmpdir/unaligned_tagged_trimmed_smart.bam
+     # $echo_prefix $trim_starting_sequence INPUT=$tmpdir/unaligned_tagged_filtered.bam OUTPUT=$tmpdir/unaligned_tagged_trimmed_smart.bam
+     # $echo_prefix $trim_poly_a INPUT=$tmpdir/unaligned_tagged_trimmed_smart.bam
      files_to_delete="$files_to_delete $tmpdir/unaligned_tagged_Cell.bam $tmpdir/unaligned_tagged_CellMolecular.bam \
                         $tmpdir/unaligned_tagged_filtered.bam $tmpdir/unaligned_tagged_trimmed_smart.bam"
-
 
      # Stage 2
      $echo_prefix $sam_to_fastq FASTQ=$tmpdir/unaligned_mc_tagged_polyA_filtered.fastq
@@ -200,13 +200,6 @@ else
      files_to_delete="$files_to_delete $tmpdir/merged.bam"
 
 fi
-
-let num_barcodes=4*$estimated_num_cells
-
-$echo_prefix ${dropseq_root}/DetectBeadSynthesisErrors INPUT=${tmpdir}/star_gene_exon_tagged.bam OUTPUT=${outdir}/error_detected.bam \
-        CREATE_INDEX=true TMP_DIR=$tmpdir \
-        SUMMARY=${outdir}/bead_synthesis_error_summary OUTPUT_STATS=${outdir}/bead_synthesis_error_detail \
-        NUM_BARCODES=$num_barcodes
 
 files_to_delete="$files_to_delete ${tmpdir}/star_gene_exon_tagged.bam"
 

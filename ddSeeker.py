@@ -155,7 +155,6 @@ def main(args):
 
     global _barcodes
     try:
-        global _barcodes
         _barcodes = [_.rstrip().split()[0] for _ in open(barcodes_file).readlines()[:96]]
     except FileNotFoundError:
         print("Error: '{}' file not found.".format(barcodes_file),
