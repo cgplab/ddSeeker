@@ -1,0 +1,1 @@
+- [ ] fix small bug: logging get mixed up between ddseeker and filter bam with -p option
