@@ -1,5 +1,5 @@
 ## ddSeeker
-A tool for processing single cell RNA-seq ddSEQ data.
+A tool for processing Bio-Rad ddSEQ single cell RNA-seq data.
 
 ### Description
 **ddSeeker** identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
