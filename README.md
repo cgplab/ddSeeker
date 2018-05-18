@@ -2,7 +2,7 @@
 A tool for processing Bio-Rad ddSEQ single cell RNA-seq data.
 
 ### Description
-**ddSeeker** identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
+`ddSeeker` identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
 
 Users must provide one unmapped BAM file
 [(uBAM)](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format)
@@ -13,12 +13,12 @@ The program returns a new unmapped BAM file with tagged reads.
 
 ### Notes
 - FASTQ files can be converted using [picard FastqToSam](https://broadinstitute.github.io/picard/command-line-overview.html#FastqToSam).
-- **ddSeeker** [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F)
-  are "XB" and "XU" for cell and molecular identifiers respectively, and "XE" 
-  to highlight why the identification has failed.
+- `ddSeeker` uses three user-defined [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F):
+  **XB** and **XU** for cell and molecular identifiers respectively, and **XE** to
+  highlight why the identification has failed.
 - Use `-s/--summary` to generate a summary of unique barcodes
   and error count.
-- By default **ddSeeker** outputs to stdout: use `-o` to specify output file name.
+- By default `ddSeeker` outputs to stdout: use `-o` to specify output file name.
 
 ### Examples
 #### Generate barcodes files
