@@ -227,7 +227,7 @@ def parse_args(args):
     parser.add_argument("-o", "--output-bam", default="-", help="Tagged uBAM file")
     parser.add_argument("-b", "--barcodes-file",
         default=pjoin(dirname(abspath(argv[0])), "barcodes.txt"),
-        help="Barcode blocks file")
+        help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
     parser.add_argument("-s", "--summary",
         help="Summary files name prefix (including absolute or relative path)")
     parser.add_argument("-n","--ncores", type=int, default=1,
