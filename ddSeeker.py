@@ -164,9 +164,6 @@ def main(args):
     info("Start analysis:", in_file, ">", "stdout" if out_file == "-" else out_file)
     in_bam = pysam.AlignmentFile(in_file, "rb", check_sq=False)
     out_bam = pysam.AlignmentFile(out_file, "w" if out_file == "-" else "wb", template = in_bam)
-    n_reads = in_bam.count(until_eof=True)//2
-    in_bam.reset()
-    info("Total reads:", n_reads)
 
     info("Get identifiers from R1")
     in_bam_iter = islice(in_bam.fetch(until_eof=True), None, None, 2)
@@ -234,7 +231,7 @@ def parse_args(args):
         help="Summary files name prefix (including absolute or relative path)")
     parser.add_argument("-n","--ncores", type=int, default=1,
         help="Number of processing units (CPUs) to use (default=1)")
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.1')
     args = parser.parse_args()
     return(args)
 
