@@ -224,7 +224,8 @@ def parse_args(args):
         "from single cell RNA sequencing experiments"
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("input_bam", help="Merged paired-end uBAM file")
-    parser.add_argument("-o", "--output-bam", default="-", help="Tagged uBAM file")
+    parser.add_argument("-o", "--output-bam", default="-",
+        help="Tagged uBAM file (default=<stout>")
     parser.add_argument("-b", "--barcodes-file",
         default=pjoin(dirname(abspath(argv[0])), "barcodes.txt"),
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
