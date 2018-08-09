@@ -41,9 +41,10 @@ def fix_block(block):
     ''
     """
     for bc in _barcodes:
-        score = global_alignment(bc, block, -1, -1, score_only=True,
-                one_alignment_only=True)
-        if len(block) == 5 and score >= 4 or len(block) >= 6 and score >= 5:
+        score = global_alignment(bc, block, -1, -1,
+                                 score_only=True,
+                                 one_alignment_only=True)
+        if len(block) >= 5 and score >= 5:
             return(bc)
     else:
         return(None)
@@ -72,19 +73,19 @@ def make_tags(read):
                 one_alignment_only=True)[0]
         seqA, seqB, score, begin, end = alignment
         length = end - begin
-        if (score == 14 or score == 15) and length == 15:
+        if length == 15 and score >= 14:
             # 0-1 mismatch
             starts.append(begin)
             k.append(0)
-        elif score == 14 and length == 14:
+        elif length == 14 and score == 14:
             # 1 mismatch at starting position
             starts.append(begin - 1)
             k.append(0)
-        elif "-" in seqA[begin:end] and score == 12 and length == 15:
+        elif "-" in seqA[begin:end] and length == 15 and score == 12:
             # 1 deletion
             starts.append(begin)
             k.append(-1)
-        elif "-" in seqB and score == 13 and length == 16:
+        elif "-" in seqB and length == 16 and score == 13:
             # 1 insertion
             starts.append(begin)
             k.append(1)
@@ -158,7 +159,7 @@ def main(args):
         _barcodes = [_.rstrip().split()[0] for _ in open(barcodes_file).readlines()[:96]]
     except FileNotFoundError:
         exit("Error: '{}' file not found.".format(barcodes_file) +\
-            "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.")
+             "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.")
 
     info("Start analysis:", in_file, ">", "stdout" if out_file == "-" else out_file)
     in_bam = pysam.AlignmentFile(in_file, "rb", check_sq=False)
