@@ -5,7 +5,7 @@ A tool for processing Bio-Rad ddSEQ single cell RNA-seq data.
 `ddSeeker` identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
 
 Users must provide one unmapped BAM file
-[(uBAM)](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format)
+([uBAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format))
 from a paired-end read experiment and a text file with a set of barcode blocks,
 one per line (if you don't have such file run `ddSeeker_barcodes.py` to generate one).
 
@@ -24,14 +24,14 @@ The program returns a new unmapped BAM file with tagged reads.
 #### Generate barcodes files
     ddSeeker_barcodes.py *.bam
 
-#### Convert Fastq with Picard
-    java -jar picard.jar FastqToSam F1=read1.fastq.gz F2=read2.fastq.gz O=unmapped.bam SORT_ORDER=queryname
+#### Convert Fastq with Picard (GATK > 4.0)
+    gatk FastqToSam -F1 sample1_R1.fastq.gz -F2 sample1_R2.fastq.gz -O sample1_unmapped.bam --SORT_ORDER queryname
 
 #### Run ddSeeker
-    ddSeeker.py unmapped.bam -o tagged.bam -s unmapped_summary -n 10
+    ddSeeker.py sample1_unmapped.bam -o sample1_tagged.bam -s sample1 -n 10
 
 #### Run full ddSeeker-"drop-seq tools" pipeline
-    ddSeeker_alignment.sh [options] unmapped.bam
+    ddSeeker_alignment.sh [options] sample1_unmapped.bam
 
 ### Dependencies
 - [Python](https://www.python.org/downloads/release/python-365/) (>= 3.5)
