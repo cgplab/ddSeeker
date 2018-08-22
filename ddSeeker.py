@@ -2,6 +2,7 @@
 
 import time
 import argparse
+from re import match
 from sys import argv, exit, stderr
 from os.path import abspath, dirname
 from os.path import join as pjoin
@@ -94,11 +95,11 @@ def make_tags(read):
             k.append(None)
 
     if not starts[0] and not starts[1]:
-        return([("XE", "LX", "Z")]) # no linker aligned
+        return([(tag_error, "LX", "Z")]) # no linker aligned
     elif not starts[0]:
-        return([("XE", "L1", "Z")]) # linker 1 not aligned
+        return([(tag_error, "L1", "Z")]) # linker 1 not aligned
     elif not starts[1]:
-        return([("XE", "L2", "Z")]) # linker 2 not aligned
+        return([(tag_error, "L2", "Z")]) # linker 2 not aligned
 
     if starts[1]-starts[0] == 21+k[0]:
         bc2 = read[starts[1]-6: starts[1]]
@@ -107,10 +108,10 @@ def make_tags(read):
     elif starts[1]-starts[0] == 22+k[0]: # 1 insertion in bc2
         bc2 = read[starts[1]-7: starts[1]]
     else:
-        return([("XE", "I", "Z")])
+        return([(tag_error, "I", "Z")])
 
     if starts[0] < 5:
-        return([("XE", "D", "Z")])
+        return([(tag_error, "D", "Z")])
     elif starts[0] == 5:
         bc1 = read[: starts[0]]
     else:
@@ -122,7 +123,7 @@ def make_tags(read):
     except ValueError:
         dist_acg = float("inf")
     if dist_acg > 1:
-        return([("XE", "J", "Z")])
+        return([(tag_error, "J", "Z")])
 
     gac = read[starts[1]+32+k[1]: starts[1]+35+k[1]]
     try:
@@ -130,7 +131,7 @@ def make_tags(read):
     except ValueError:
         dist_gac = float("inf")
     if dist_gac > 1:
-        return([("XE", "K", "Z")])
+        return([(tag_error, "K", "Z")])
 
     bc3 = read[starts[1]+15+k[1]: starts[1]+21+k[1]]
 
@@ -140,11 +141,11 @@ def make_tags(read):
         if fixed:
             barcode.append(fixed)
         else:
-            return([("XE", "B", "Z")])
+            return([(tag_error, "B", "Z")])
 
     umi = read[starts[1]+24+k[1]: starts[1]+32+k[1]]
 
-    return([("XB", "".join(barcode), "Z"), ("XU", umi, "Z")])
+    return([(tag_bc, "".join(barcode), "Z"), (tag_umi, umi, "Z")])
 
 def main(args):
     args = parse_args(args)
@@ -153,6 +154,19 @@ def main(args):
     summary = args.summary
     cores = args.ncores
     barcodes_file = args.barcodes_file
+
+    tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
+    if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
+        exit("Error: tags must be unique.")
+    if not (match(tag_pattern, args.tag_bc) and match(tag_pattern, args.tag_umi) and match(tag_pattern, args.tag_error)):
+        exit("Error: tags must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
+
+    global tag_bc
+    global tag_umi
+    global tag_error
+    tag_bc    = args.tag_bc
+    tag_umi   = args.tag_umi
+    tag_error = args.tag_error
 
     global _barcodes
     try:
@@ -182,9 +196,9 @@ def main(args):
         out_bam.write(read)
 
         # summary statistics
-        if summary and tags[i][0][0] == "XE":
+        if summary and tags[i][0][0] == tag_error:
             error_count[tags[i][0][1]] = error_count.get(tags[i][0][1], 0) + 1
-        elif summary and tags[i][0][0] == "XB":
+        elif summary and tags[i][0][0] == tag_bc:
             cell_count[tags[i][0][1]] = cell_count.get(tags[i][0][1], 0) + 1
             error_count["PASS"] = error_count.get("PASS", 0) + 1
 
@@ -221,17 +235,33 @@ def parse_args(args):
     description = "A tool to extract cellular and molecular identifiers " +\
         "from single cell RNA sequencing experiments"
     parser = argparse.ArgumentParser(description=description)
+
     parser.add_argument("input_bam", help="Merged paired-end uBAM file")
+
     parser.add_argument("-o", "--output-bam", default="-",
         help="Tagged uBAM file (default=<stout>")
+
     parser.add_argument("-b", "--barcodes-file",
         default=pjoin(dirname(abspath(argv[0])), "barcodes.txt"),
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
+
     parser.add_argument("-s", "--summary",
         help="Summary files name prefix (including absolute or relative path)")
+
     parser.add_argument("-n","--ncores", type=int, default=1,
         help="Number of processing units (CPUs) to use (default=1)")
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.1')
+
+    parser.add_argument("--tag-bc", type=str, default="XB",
+        help="Tag for barcode (default=XB)")
+
+    parser.add_argument("--tag-umi", type=str, default="XU",
+        help="Tag for Universal Molecular Identifier (default=XU)")
+
+    parser.add_argument("--tag-error", type=str, default="XE",
+        help="Tag for errors (default=XE)")
+
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.2')
+
     args = parser.parse_args()
     return(args)
 
