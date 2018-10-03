@@ -50,7 +50,7 @@ def fix_block(block):
     else:
         return(None)
 
-def make_tags(read):
+def make_tags(sequence):
     """Extract barcodes from R1 and return a tuple of SAM-format TAGs.
     XB = barcode
     XU = UMI
@@ -66,11 +66,11 @@ def make_tags(read):
     K = indel in UMI or GAC trinucleotide
     B = one BC with more than 1 mismatch"""
 
-    read = read.upper()
+    sequence = sequence.upper()
     starts = []
     k = []
     for linker in _linkers:  # align the two linkers
-        alignment = local_alignment(read, linker, -2, -1,
+        alignment = local_alignment(sequence, linker, -2, -1,
                 one_alignment_only=True)[0]
         seqA, seqB, score, begin, end = alignment
         length = end - begin
@@ -102,22 +102,22 @@ def make_tags(read):
         return([(tag_error, "L2", "Z")]) # linker 2 not aligned
 
     if starts[1]-starts[0] == 21+k[0]:
-        bc2 = read[starts[1]-6: starts[1]]
+        bc2 = sequence[starts[1]-6: starts[1]]
     elif starts[1]-starts[0] == 20+k[0]: # 1 deletion in bc2
-        bc2 = read[starts[1]-5: starts[1]]
+        bc2 = sequence[starts[1]-5: starts[1]]
     elif starts[1]-starts[0] == 22+k[0]: # 1 insertion in bc2
-        bc2 = read[starts[1]-7: starts[1]]
+        bc2 = sequence[starts[1]-7: starts[1]]
     else:
         return([(tag_error, "I", "Z")])
 
     if starts[0] < 5:
         return([(tag_error, "D", "Z")])
     elif starts[0] == 5:
-        bc1 = read[: starts[0]]
+        bc1 = sequence[: starts[0]]
     else:
-        bc1 = read[starts[0]-6: starts[0]]
+        bc1 = sequence[starts[0]-6: starts[0]]
 
-    acg = read[starts[1]+21+k[1]: starts[1]+24+k[1]]
+    acg = sequence[starts[1]+21+k[1]: starts[1]+24+k[1]]
     i=0
     thr=0
     while i < len(acg) and thr <= 1:
@@ -135,7 +135,7 @@ def make_tags(read):
     if dist_acg > 1:
         return([(tag_error, "J", "Z")])
 
-    gac = read[starts[1]+32+k[1]: starts[1]+35+k[1]]
+    gac = sequence[starts[1]+32+k[1]: starts[1]+35+k[1]]
     try:
         dist_gac = hamming_dist(gac, "GAC")
     except ValueError:
@@ -143,7 +143,7 @@ def make_tags(read):
     if dist_gac > 1:
         return([(tag_error, "K", "Z")])
 
-    bc3 = read[starts[1]+15+k[1]: starts[1]+21+k[1]]
+    bc3 = sequence[starts[1]+15+k[1]: starts[1]+21+k[1]]
 
     barcode = []
     for block in (bc1, bc2, bc3):
@@ -153,7 +153,7 @@ def make_tags(read):
         else:
             return([(tag_error, "B", "Z")])
 
-    umi = read[starts[1]+24+k[1]: starts[1]+32+k[1]]
+    umi = sequence[starts[1]+24+k[1]: starts[1]+32+k[1]]
 
     return([(tag_bc, "".join(barcode), "Z"), (tag_umi, umi, "Z")])
 
