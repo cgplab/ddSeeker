@@ -7,9 +7,10 @@ from sys import argv, exit, stderr
 from os.path import abspath, dirname
 from os.path import join as pjoin
 from numpy import cumsum
-from multiprocessing import Pool
+import multiprocessing
 from itertools import islice
-import pysam
+import itertools
+import simplesam
 from Bio import pairwise2
 
 local_alignment = pairwise2.align.localxs
@@ -50,7 +51,7 @@ def fix_block(block):
     else:
         return(None)
 
-def make_tags(sequence):
+def get_tags(sequence):
     """Extract barcodes from R1 and return a tuple of SAM-format TAGs.
     XB = barcode
     XU = UMI
@@ -95,11 +96,11 @@ def make_tags(sequence):
             k.append(None)
 
     if not starts[0] and not starts[1]:
-        return([(tag_error, "LX", "Z")]) # no linker aligned
+        return([(tag_error, "LX")]) # no linker aligned
     elif not starts[0]:
-        return([(tag_error, "L1", "Z")]) # linker 1 not aligned
+        return([(tag_error, "L1")]) # linker 1 not aligned
     elif not starts[1]:
-        return([(tag_error, "L2", "Z")]) # linker 2 not aligned
+        return([(tag_error, "L2")]) # linker 2 not aligned
 
     if starts[1]-starts[0] == 21+k[0]:
         bc2 = sequence[starts[1]-6: starts[1]]
@@ -108,32 +109,32 @@ def make_tags(sequence):
     elif starts[1]-starts[0] == 22+k[0]: # 1 insertion in bc2
         bc2 = sequence[starts[1]-7: starts[1]]
     else:
-        return([(tag_error, "I", "Z")])
+        return([(tag_error, "I")])
 
     if starts[0] < 5:
-        return([(tag_error, "D", "Z")])
+        return([(tag_error, "D")])
     elif starts[0] == 5:
         bc1 = sequence[: starts[0]]
     else:
         bc1 = sequence[starts[0]-6: starts[0]]
 
     acg = sequence[starts[1]+21+k[1]: starts[1]+24+k[1]]
-    i=0
-    thr=0
+    i = 0
+    thr = 0
     while i < len(acg) and thr <= 1:
         if acg[i] != "ACG"[i]:
             thr += 1
         i += 1
     else:
         if thr > 1:
-            return([("XE", "J", "Z")])
+            return([("XE", "J")])
 
     try:
         dist_acg = hamming_dist(acg, "ACG")
     except ValueError:
         dist_acg = float("inf")
     if dist_acg > 1:
-        return([(tag_error, "J", "Z")])
+        return([(tag_error, "J")])
 
     gac = sequence[starts[1]+32+k[1]: starts[1]+35+k[1]]
     try:
@@ -141,7 +142,7 @@ def make_tags(sequence):
     except ValueError:
         dist_gac = float("inf")
     if dist_gac > 1:
-        return([(tag_error, "K", "Z")])
+        return([(tag_error, "K")])
 
     bc3 = sequence[starts[1]+15+k[1]: starts[1]+21+k[1]]
 
@@ -151,16 +152,24 @@ def make_tags(sequence):
         if fixed:
             barcode.append(fixed)
         else:
-            return([(tag_error, "B", "Z")])
+            return([(tag_error, "B")])
 
     umi = sequence[starts[1]+24+k[1]: starts[1]+32+k[1]]
 
-    return([(tag_bc, "".join(barcode), "Z"), (tag_umi, umi, "Z")])
+    return([(tag_bc, "".join(barcode)), (tag_umi, umi)])
+
+def add_tags(paired_reads):
+    read1, read2 = paired_reads
+    tags = get_tags(read1.seq)
+    for tag in tags:
+        read2[tag[0]] = tag[1]
+    read2.flag -= (1 + 8 + 128) # remove these flags: read paired, mate unmapped, second in pair
+    return(read2)
 
 def main(args):
     args = parse_args(args)
-    in_file = args.input_bam
-    out_file = args.output_bam
+    in_filename = args.input_bam
+    out_filename = args.output_bam
     summary = args.summary
     cores = args.ncores
     barcodes_file = args.barcodes_file
@@ -185,59 +194,69 @@ def main(args):
         exit("Error: '{}' file not found.".format(barcodes_file) +\
              "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.")
 
-    info("Start analysis:", in_file, ">", "stdout" if out_file == "-" else out_file)
-    in_bam = pysam.AlignmentFile(in_file, "rb", check_sq=False)
-    out_bam = pysam.AlignmentFile(out_file, "w" if out_file == "-" else "wb", template = in_bam)
+    info("Start analysis:", in_filename, ">", "stdout" if out_filename == "-" else out_filename)
+    in_file = open(in_filename)
+    in_bam = simplesam.Reader(in_file)
 
     info("Get identifiers from R1")
-    in_bam_iter = islice(in_bam.fetch(until_eof=True), None, None, 2)
-    reads = (_.query_sequence for _ in in_bam_iter)
-    with Pool(cores) as pool:
-        tags = pool.map(make_tags, reads)
+    reads = itertools.zip_longest(*[iter(in_bam)] * 2)
 
-    info("Add tags to R2")
-    in_bam.reset()
-    out_bam_iter = islice(in_bam.fetch(until_eof=True), 1, None, 2)
-    cell_count = {}
-    error_count = {}
-    for (i, read) in enumerate(out_bam_iter):
-        read.set_tags(tags[i])
-        read.flag = 4
-        out_bam.write(read)
+    out_file = open(out_filename, "w")
+    out_sam = simplesam.Writer(out_file, in_bam.header)
 
-        # summary statistics
-        if summary and tags[i][0][0] == tag_error:
-            error_count[tags[i][0][1]] = error_count.get(tags[i][0][1], 0) + 1
-        elif summary and tags[i][0][0] == tag_bc:
-            cell_count[tags[i][0][1]] = cell_count.get(tags[i][0][1], 0) + 1
-            error_count["PASS"] = error_count.get("PASS", 0) + 1
-
+    #  for i,duple in enumerate(reads):
+    #      read2 = add_tags(duple)
+    #      out_sam.write(read2)
+    p = multiprocessing.Pool()
+    all_read2 = p.map(add_tags, reads)
+    for i,read2 in enumerate(all_read2):
+        print(i, end='\r')
+        out_sam.write(read2)
+    print()
     in_bam.close()
-    out_bam.close()
+    out_sam.close()
 
-    if summary:
-        info("Write summary files")
-        file_name = summary + ".errors"
-        ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
-        out = open(file_name, "w")
-        out.write("Error\tCount\tFraction\n")
-        for tag in ordered_tags:
-            count = error_count.get(tag, 0)
-            fraction = error_count.get(tag, 0)/sum(error_count.values())
-            out.write("{}\t{}\t{}\n".format(tag, count, fraction))
-        out.close()
+    #  with multiprocessing.Pool(cores) as pool:
+    #      tags = pool.map(get_tags, reads)
 
-        file_name = summary + ".cell_barcodes"
-        sorted_barcodes = sorted(cell_count, key=lambda x: cell_count[x],
-                reverse=True)
-        cell_cumsum = cumsum([cell_count[b] for b in sorted_barcodes]) / \
-                sum(cell_count.values())
-        out = open(file_name, "w")
-        out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
-        for i, barcode in enumerate(sorted_barcodes):
-            out.write("{}\t{}\t{}\n".format(barcode, cell_count[barcode],
-                cell_cumsum[i]))
-        out.close()
+    #  cell_count = {}
+    #  error_count = {}
+    #  for (i, read) in enumerate(out_bam_iter):
+    #      read.set_tags(tags[i])
+    #      read.flag = read.flag - (1 + 8 + 128) # remove flags: read paired, mate unmapped, second in pair
+    #      out_sam.write(read)
+
+    #      # summary statistics
+    #      if summary and tags[i][0][0] == tag_error:
+    #          error_count[tags[i][0][1]] = error_count.get(tags[i][0][1], 0) + 1
+    #      elif summary and tags[i][0][0] == tag_bc:
+    #          cell_count[tags[i][0][1]] = cell_count.get(tags[i][0][1], 0) + 1
+    #          error_count["PASS"] = error_count.get("PASS", 0) + 1
+
+
+    #  if summary:
+    #      info("Write summary files")
+    #      file_name = summary + ".errors"
+    #      ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
+    #      out = open(file_name, "w")
+    #      out.write("Error\tCount\tFraction\n")
+    #      for tag in ordered_tags:
+    #          count = error_count.get(tag, 0)
+    #          fraction = error_count.get(tag, 0)/sum(error_count.values())
+    #          out.write("{}\t{}\t{}\n".format(tag, count, fraction))
+    #      out.close()
+
+    #      file_name = summary + ".cell_barcodes"
+    #      sorted_barcodes = sorted(cell_count, key=lambda x: cell_count[x],
+    #              reverse=True)
+    #      cell_cumsum = cumsum([cell_count[b] for b in sorted_barcodes]) / \
+    #              sum(cell_count.values())
+    #      out = open(file_name, "w")
+    #      out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
+    #      for i, barcode in enumerate(sorted_barcodes):
+    #          out.write("{}\t{}\t{}\n".format(barcode, cell_count[barcode],
+    #              cell_cumsum[i]))
+    #      out.close()
     info("Done")
 
 def parse_args(args):
