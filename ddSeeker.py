@@ -3,14 +3,14 @@
 import time
 import argparse
 from re import match
-from sys import argv, exit, stderr
+import sys
 from os.path import abspath, dirname
 from os.path import join as pjoin
 from numpy import cumsum
-import multiprocessing
+from multiprocessing import Pool
 from itertools import islice
 import itertools
-import simplesam
+import pysam
 from Bio import pairwise2
 
 local_alignment = pairwise2.align.localxs
@@ -18,7 +18,7 @@ global_alignment = pairwise2.align.globalxs
 _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
 
 def info(*args, **kwargs):
-    print(time.strftime("[%Y-%m-%d %H:%M:%S]"), file=stderr, *args, **kwargs)
+    print(time.strftime("[%Y-%m-%d %H:%M:%S]"), file=sys.stderr, *args, **kwargs)
 
 def hamming_dist(s1, s2):
     """Return the Hamming distance between equal-length sequences
@@ -176,9 +176,11 @@ def main(args):
 
     tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
     if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
-        exit("Error: tags must be unique.")
+        print("Error: tags must be unique.", file=sys.stderr)
+        sys.exit(1)
     if not (match(tag_pattern, args.tag_bc) and match(tag_pattern, args.tag_umi) and match(tag_pattern, args.tag_error)):
-        exit("Error: tags must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
+        print("Error: tags must be two-character strings matching /[A-Za-z][A-Za-z0-9]/", file=sys.stderr)
+        sys.exit(1)
 
     global tag_bc
     global tag_umi
@@ -191,73 +193,70 @@ def main(args):
     try:
         _barcodes = [_.rstrip().split()[0] for _ in open(barcodes_file).readlines()[:96]]
     except FileNotFoundError:
-        exit("Error: '{}' file not found.".format(barcodes_file) +\
-             "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.")
+        print("Error: '{}' file not found.".format(barcodes_file) + \
+             "Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.", file=sys.stderr)
+        sys.exit(1)
 
-    info("Start analysis:", in_filename, ">", "stdout" if out_filename == "-" else out_filename)
-    in_file = open(in_filename)
-    in_bam = simplesam.Reader(in_file)
+    #  info("Start analysis:", in_filename, "->", "stdout" if out_filename == "-" else out_filename)
+    in_bam1 = pysam.AlignmentFile(in_filename, "rb", check_sq=False)
+    in_bam2 = pysam.AlignmentFile(in_filename, "rb", check_sq=False)
+    out_bam = pysam.AlignmentFile(out_filename, "w" if out_filename == "-" else "wb", template = in_bam1)
 
-    info("Get identifiers from R1")
-    reads = itertools.zip_longest(*[iter(in_bam)] * 2)
+    # iterable of read1 sequences
+    in_bam_iter1 = islice(in_bam1.fetch(until_eof=True), None, None, 2)
+    in_bam_iter2 = islice(in_bam2.fetch(until_eof=True), 1, None, 2)
+    reads = (_.query_sequence for _ in in_bam_iter1)
 
-    out_file = open(out_filename, "w")
-    out_sam = simplesam.Writer(out_file, in_bam.header)
+    p = Pool(cores)
+    #  info("Get identifiers from R1")
+    cell_count = {}
+    error_count = {}
+    _start = time.perf_counter()
+    for tags in p.imap(get_tags, reads):
+        read2 = next(in_bam_iter2)
+        read2.set_tags(tags)
+        read2.flag -= (1 + 8 + 128) # remove flags: read paired, mate unmapped, second in pair
+        out_bam.write(read2)
 
-    #  for i,duple in enumerate(reads):
-    #      read2 = add_tags(duple)
-    #      out_sam.write(read2)
-    p = multiprocessing.Pool()
-    all_read2 = p.map(add_tags, reads)
-    for i,read2 in enumerate(all_read2):
-        print(i, end='\r')
-        out_sam.write(read2)
-    print()
-    in_bam.close()
-    out_sam.close()
+        # summary statistics
+        if summary and tags[0][0] == tag_error:
+            error_count[tags[0][1]] = error_count.get(tags[0][1], 0) + 1
+        elif summary and tags[0][0] == tag_bc:
+            cell_count[tags[0][1]] = cell_count.get(tags[0][1], 0) + 1
+            error_count["PASS"] = error_count.get("PASS", 0) + 1
 
-    #  with multiprocessing.Pool(cores) as pool:
-    #      tags = pool.map(get_tags, reads)
+    _check = time.perf_counter()
+    print("Finished writing bam file in {} seconds.".format(round(_check-_start, 3)))
+    in_bam1.close()
+    in_bam2.close()
+    out_bam.close()
+    p.close()
 
-    #  cell_count = {}
-    #  error_count = {}
-    #  for (i, read) in enumerate(out_bam_iter):
-    #      read.set_tags(tags[i])
-    #      read.flag = read.flag - (1 + 8 + 128) # remove flags: read paired, mate unmapped, second in pair
-    #      out_sam.write(read)
+    if summary:
+        info("Write summary files")
+        file_name = summary + ".errors"
+        ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
+        out = open(file_name, "w")
+        out.write("Error\tCount\tFraction\n")
+        for tag in ordered_tags:
+            count = error_count.get(tag, 0)
+            fraction = error_count.get(tag, 0)/sum(error_count.values())
+            out.write("{}\t{}\t{}\n".format(tag, count, fraction))
+        out.close()
 
-    #      # summary statistics
-    #      if summary and tags[i][0][0] == tag_error:
-    #          error_count[tags[i][0][1]] = error_count.get(tags[i][0][1], 0) + 1
-    #      elif summary and tags[i][0][0] == tag_bc:
-    #          cell_count[tags[i][0][1]] = cell_count.get(tags[i][0][1], 0) + 1
-    #          error_count["PASS"] = error_count.get("PASS", 0) + 1
-
-
-    #  if summary:
-    #      info("Write summary files")
-    #      file_name = summary + ".errors"
-    #      ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
-    #      out = open(file_name, "w")
-    #      out.write("Error\tCount\tFraction\n")
-    #      for tag in ordered_tags:
-    #          count = error_count.get(tag, 0)
-    #          fraction = error_count.get(tag, 0)/sum(error_count.values())
-    #          out.write("{}\t{}\t{}\n".format(tag, count, fraction))
-    #      out.close()
-
-    #      file_name = summary + ".cell_barcodes"
-    #      sorted_barcodes = sorted(cell_count, key=lambda x: cell_count[x],
-    #              reverse=True)
-    #      cell_cumsum = cumsum([cell_count[b] for b in sorted_barcodes]) / \
-    #              sum(cell_count.values())
-    #      out = open(file_name, "w")
-    #      out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
-    #      for i, barcode in enumerate(sorted_barcodes):
-    #          out.write("{}\t{}\t{}\n".format(barcode, cell_count[barcode],
-    #              cell_cumsum[i]))
-    #      out.close()
-    info("Done")
+        file_name = summary + ".cell_barcodes"
+        sorted_barcodes = sorted(cell_count, key=lambda x: cell_count[x],
+                reverse=True)
+        cell_cumsum = cumsum([cell_count[b] for b in sorted_barcodes]) / \
+                sum(cell_count.values())
+        out = open(file_name, "w")
+        out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
+        for i, barcode in enumerate(sorted_barcodes):
+            out.write("{}\t{}\t{}\n".format(barcode, cell_count[barcode],
+                cell_cumsum[i]))
+        out.close()
+    _end = time.perf_counter()
+    print("Finished writing summary file in {} seconds.".format(round(_end-_check, 3)))
 
 def parse_args(args):
     """Parse argv"""
@@ -271,7 +270,7 @@ def parse_args(args):
         help="Tagged uBAM file (default=<stout>")
 
     parser.add_argument("-b", "--barcodes-file",
-        default=pjoin(dirname(abspath(argv[0])), "barcodes.txt"),
+        default=pjoin(dirname(abspath(sys.argv[0])), "barcodes.txt"),
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
 
     parser.add_argument("-s", "--summary",
@@ -281,7 +280,7 @@ def parse_args(args):
         help="Number of processing units (CPUs) to use (default=1)")
 
     parser.add_argument("--tag-bc", type=str, default="XB",
-        help="Tag for barcode (default=XB)")
+        help="Tag for single cell barcode (default=XB)")
 
     parser.add_argument("--tag-umi", type=str, default="XU",
         help="Tag for Universal Molecular Identifier (default=XU)")
@@ -295,4 +294,4 @@ def parse_args(args):
     return(args)
 
 if __name__ == "__main__":
-    main(argv[1:])
+    main(sys.argv[1:])
