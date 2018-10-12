@@ -1,1 +1,2 @@
-- [ ] fix small bug: logging get mixed up between ddseeker and filter bam with -p option
+- [x] use two fastq files as input (read1, read2)
+- [ ] restore output to stdout
