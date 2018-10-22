@@ -1,2 +1,3 @@
 - [x] use two fastq files as input (read1, read2)
-- [ ] restore output to stdout
+- [ ] add rscript to produce graphs
+- [ ] add pipelines
