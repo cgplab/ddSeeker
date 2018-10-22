@@ -129,7 +129,7 @@ def parse_args(args):
     parser.add_argument("--subset", type=int,
         help="Select a lower number of reads to analyze [for debugging purposes]")
 
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.90.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.9.0')
     args = parser.parse_args()
 
     return(args)

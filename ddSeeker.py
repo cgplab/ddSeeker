@@ -3,23 +3,26 @@
 import logging
 import sys
 import time
-import argparse
 import pysam
+from argparse import ArgumentParser, ArgumentTypeError
+from pathlib import Path
+from functools import partial
 from re import match as re_match
-from os.path import abspath, dirname
-from os.path import join as pjoin
 from numpy import cumsum
 from multiprocessing import Pool
 from itertools import islice
-from Bio import pairwise2, SeqIO
+from Bio import pairwise2
+from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from gzip import open as gzopen
-from itertools import islice
 
 logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S',
                     format="[%(asctime)s] %(levelname)s - %(message)s")
-_local_aligner = pairwise2.align.localxs
-_global_aligner = pairwise2.align.globalxs
 _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
+_local_aligner = partial(pairwise2.align.localxs, one_alignment_only=True)
+_global_aligner = partial(pairwise2.align.globalxs, score_only=True, one_alignment_only=True)
+
+_cell_count = {}
+_error_count = {}
 
 def hamming_dist(s1, s2):
     """Return the Hamming distance between equal-length sequences
@@ -44,9 +47,7 @@ def fix_block(block):
     ''
     """
     for bc in _barcodes:
-        score = _global_aligner(bc, block, -1, -1,
-                                 score_only=True,
-                                 one_alignment_only=True)
+        score = _global_aligner(bc, block, -1, -1)
         if len(block) >= 5 and score >= 5:
             return(bc)
     else:
@@ -73,8 +74,7 @@ def get_tags(sequence):
     starts = []
     k = []
     for linker in _linkers:  # align the two linkers
-        alignment = _local_aligner(sequence, linker, -2, -1,
-                one_alignment_only=True)[0]
+        alignment = _local_aligner(sequence, linker, -2, -1)[0]
         seqA, seqB, score, begin, end = alignment
         length = end - begin
         if length == 15 and score >= 14:
@@ -163,31 +163,31 @@ def get_tags(sequence):
 def compute_summary(tags):
     # summary statistics
     if tags[0][0] == _tag_error:
-        error_count[tags[0][1]] = error_count.get(tags[0][1], 0) + 1
+        _error_count[tags[0][1]] = _error_count.get(tags[0][1], 0) + 1
     elif tags[0][0] == _tag_bc:
-        cell_count[tags[0][1]] = cell_count.get(tags[0][1], 0) + 1
-        error_count["PASS"] = error_count.get("PASS", 0) + 1
+        _cell_count[tags[0][1]] = _cell_count.get(tags[0][1], 0) + 1
+        _error_count["PASS"] = _error_count.get("PASS", 0) + 1
 
 def write_summary(summary):
-    file_name = summary + ".errors"
+    file_name = summary + "_errors.csv"
     ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
     out = open(file_name, "w")
     out.write("Error\tCount\tFraction\n")
     for tag in ordered_tags:
-        count = error_count.get(tag, 0)
-        fraction = error_count.get(tag, 0)/sum(error_count.values())
+        count = _error_count.get(tag, 0)
+        fraction = _error_count.get(tag, 0)/sum(_error_count.values())
         out.write("{}\t{}\t{}\n".format(tag, count, fraction))
     out.close()
 
-    file_name = summary + ".cell_barcodes"
-    sorted_barcodes = sorted(cell_count, key=lambda x: cell_count[x],
+    file_name = summary + "_cell_barcodes.csv"
+    sorted_barcodes = sorted(_cell_count, key=lambda x: _cell_count[x],
             reverse=True)
-    cell_cumsum = cumsum([cell_count[b] for b in sorted_barcodes]) / \
-            sum(cell_count.values())
+    cell_cumsum = cumsum([_cell_count[b] for b in sorted_barcodes]) / \
+            sum(_cell_count.values())
     out = open(file_name, "w")
     out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
     for i, barcode in enumerate(sorted_barcodes):
-        out.write("{}\t{}\t{}\n".format(barcode, cell_count[barcode],
+        out.write("{}\t{}\t{}\n".format(barcode, _cell_count[barcode],
             cell_cumsum[i]))
     out.close()
 
@@ -198,18 +198,13 @@ def main(argv=None):
     # Parameters #####
     args = parse_args(argv)
 
-    if len(args.input) == 1:
-       in_filename1, in_filename2 = args.input[0], None
-    elif len(args.input) == 2:
-        in_filename1, in_filename2 = args.input
-    else:
-        print("no more than two inputs.")
+    global _barcodes
+    try:
+        _barcodes = [_.rstrip().split()[0] for _ in args.barcodes_file.open().readlines()[:96]]
+    except FileNotFoundError:
+        logging.error("'{}' file not found. ".format(args.barcodes_file) + \
+              "Specify file path using the -b option or run 'ddSeeker_barcodes.py' to create it.")
         sys.exit(1)
-
-    out_filename = args.output
-    summary_pref = args.summary_prefix
-    cores = args.cores
-    barcodes_file = args.barcodes_file
 
     global _tag_bc
     global _tag_umi
@@ -218,74 +213,92 @@ def main(argv=None):
     _tag_umi   = args.tag_umi
     _tag_error = args.tag_error
 
-    global _barcodes
-    try:
-        _barcodes = [_.rstrip().split()[0] for _ in open(barcodes_file).readlines()[:96]]
-    except FileNotFoundError:
-        print("'{}' file not found.".format(barcodes_file) + \
-              "  Specify file path with -b flag or run 'ddSeeker_barcodes.py' to create one.", file=sys.stderr)
-        sys.exit(1)
+    # check parameters
+    if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
+        raise ArgumentTypeError("tags provided with '--tag' must be unique.")
 
-    if summary_pref:
-        global cell_count
-        global error_count
-        cell_count = {}
-        error_count = {}
+    tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
+    if not (re_match(tag_pattern, args.tag_bc) and re_match(tag_pattern, args.tag_umi) and re_match(tag_pattern, args.tag_error)):
+        raise ArgumentTypeError("tags provided with '--tag' must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
+
+    if len(args.input) == 1:
+        in_filename1 = args.input[0]
+        ext1 = Path(args.input[0]).suffixes
+        if ext1[-1] == ".bam" or ext1[-1] == ".sam":
+            file_type = "bam"
+        else:
+            raise IOError("Using one input file requires it to have .bam/.sam extension")
+
+    elif len(args.input) == 2:
+        in_filename1, in_filename2 = args.input
+        ext1 = Path(args.input[0]).suffixes
+        ext2 = Path(args.input[1]).suffixes
+
+        if ext1[-1] == ext2[-1] and ext1[-2] == ".fastq" and ext1[-1] == ".gz":
+            file_type = "fastq"
+        else:
+            raise IOError("Using two input files requires both of them to have .fastq.gz extension")
+    elif len(args.input) > 2:
+        raise ArgumentTypeError("'-i/--input' expects either 1 bam file or 2 fastq files")
+    else:
+        raise IOError("Unrecognized input file extension '{}'".format(ext1[-1]))
+
+    bam_write_mode = "w" if args.output == "-" else "wb"
 
     # Processing ####
     _start = time.perf_counter()
-    pool = Pool(cores)
-    bam_write_mode = "w" if out_filename == "-" else "wb"
-    if not in_filename2: # unmapped bam file
-        in_bam1 = pysam.AlignmentFile(in_filename1, "rb", check_sq=False)
+    if file_type == 'bam':
+        in_bam1 = pysam.AlignmentFile(in_filename1, check_sq=False)
         in_bam_iter1 = islice(in_bam1.fetch(until_eof=True), None, None, 2)
         reads = (_.query_sequence for _ in in_bam_iter1)
 
-        in_bam2 = pysam.AlignmentFile(in_filename1, "rb", check_sq=False)
+        in_bam2 = pysam.AlignmentFile(in_filename1, check_sq=False)
         in_bam_iter2 = islice(in_bam2.fetch(until_eof=True), 1, None, 2)
 
-        out_bam = pysam.AlignmentFile(out_filename, bam_write_mode, template=in_bam1)
+        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, template=in_bam1)
     else: # fastq files
-        reads = (str(_.seq) for _ in SeqIO.parse(gzopen(in_filename1, "rt"), format="fastq"))
-        in_fastq2 = (_ for _ in SeqIO.parse(gzopen(in_filename2, "rt"), format="fastq"))
+        reads = (seq for _, seq, _ in FastqGeneralIterator(gzopen(in_filename1, "rt")))
+        in_fastq2 = (record for record in FastqGeneralIterator(gzopen(in_filename2, "rt")))
 
         header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
-        out_bam = pysam.AlignmentFile(out_filename, bam_write_mode, header=header)
+        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, header=header)
 
     if args.subset: # DEBUGGING PURPOSES
         reads = islice(reads, args.subset)
 
     logging.info("Extracting tags")
+    pool = Pool(args.cores)
     for tags in pool.imap(get_tags, reads):
-        if not in_filename2:
+        if file_type == "bam":
             read2 = next(in_bam_iter2)
             sam_record = read2
+            sam_record.template_length = len(read2.seq)
         else:
-            read2 = next(in_fastq2)
+            title, seq, qual = next(in_fastq2)
             sam_record = pysam.AlignedSegment()
-            sam_record.query_name = read2.name
-            sam_record.query_sequence = str(read2.seq)
-            sam_record.query_qualities = pysam.qualitystring_to_array(read2.format("fastq").split()[-1])
+            sam_record.query_name = title.split()[0]
+            sam_record.query_sequence = seq
+            sam_record.query_qualities = pysam.qualitystring_to_array(qual)
+            sam_record.template_length = len(seq)
         #  sam_record.flag -= (1 + 8 + 128) # remove flags: read paired, mate unmapped, second in pair
         sam_record.flag = 4
-        sam_record.template_length=len(read2.seq)
         sam_record.set_tags(tags)
         out_bam.write(sam_record)
 
-        if summary_pref: # summary statistics
+        if args.summary_prefix: # summary statistics
             compute_summary(tags)
+    pool.close()
     out_bam.close()
     logging.info("All reads analyzed")
 
-    if not in_filename2:
+    if file_type == "bam":
         in_bam1.close()
         in_bam2.close()
     out_bam.close()
-    pool.close()
 
-    if summary_pref:
+    if args.summary_prefix:
         logging.info("Writing summary files")
-        write_summary(summary_pref)
+        write_summary(args.summary_prefix)
 
     _end = time.perf_counter()
     logging.info("Done. Elapsed time: {} minutes.".format(round((_end-_start)/60, 2)))
@@ -293,7 +306,8 @@ def main(argv=None):
 def parse_args(args):
     description = "A tool to extract cellular and molecular identifiers " +\
         "from single cell RNA sequencing experiments"
-    parser = argparse.ArgumentParser(description=description)
+
+    parser = ArgumentParser(description=description)
 
     parser.add_argument("-i", "--input", required=True, nargs="*",
             help="Either one merged paired-end unmapped BAM file " +\
@@ -301,8 +315,8 @@ def parse_args(args):
     parser.add_argument("-o", "--output", required=True,
             help="Tagged unmapped BAM file (use '-' to output to stdout")
 
-    parser.add_argument("-b", "--barcodes-file",
-        default=pjoin(dirname(abspath(sys.argv[0])), "barcodes.txt"),
+    barcodes_file = Path(sys.argv[0]).resolve().parent.joinpath("barcodes.txt")
+    parser.add_argument("-b", "--barcodes-file", type=Path, default=barcodes_file,
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
 
     parser.add_argument("-s", "--summary-prefix",
@@ -323,20 +337,10 @@ def parse_args(args):
     parser.add_argument("--subset", type=int,
         help="Select a lower number of reads to analyze [for debugging purposes]")
 
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.90.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.9.0')
 
     args = parser.parse_args()
 
-    # check parameters
-    if not (1 <= len(args.input) <= 2):
-        raise argparse.ArgumentTypeError("'-i/--input' expects exactly 1 or 2 files")
-
-    if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
-        raise argparse.ArgumentTypeError("tags provided with '--tag' must be unique.")
-
-    tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
-    if not (re_match(tag_pattern, args.tag_bc) and re_match(tag_pattern, args.tag_umi) and re_match(tag_pattern, args.tag_error)):
-        raise argparse.ArgumentTypeError("tags provided with '--tag' must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
     return(args)
 
 if __name__ == "__main__":
