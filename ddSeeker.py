@@ -11,7 +11,8 @@ from re import match as re_match
 from numpy import cumsum
 from multiprocessing import Pool
 from itertools import islice
-from Bio import pairwise2
+from Bio import pairwise2, SeqIO
+from Bio.SeqRecord import SeqRecord
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from gzip import open as gzopen
 
@@ -21,7 +22,7 @@ _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
 _local_aligner = partial(pairwise2.align.localxs, one_alignment_only=True)
 _global_aligner = partial(pairwise2.align.globalxs, score_only=True, one_alignment_only=True)
 
-_cell_count = {}
+_cell_count={}
 _error_count = {}
 
 def hamming_dist(s1, s2):
@@ -98,11 +99,11 @@ def get_tags(sequence):
             k.append(None)
 
     if not starts[0] and not starts[1]:
-        return([(_tag_error, "LX")]) # no linker aligned
+        return(dict([(_tag_error, "LX")])) # no linker aligned
     elif not starts[0]:
-        return([(_tag_error, "L1")]) # linker 1 not aligned
+        return(dict([(_tag_error, "L1")])) # linker 1 not aligned
     elif not starts[1]:
-        return([(_tag_error, "L2")]) # linker 2 not aligned
+        return(dict([(_tag_error, "L2")])) # linker 2 not aligned
 
     if starts[1]-starts[0] == 21+k[0]:
         bc2 = sequence[starts[1]-6: starts[1]]
@@ -111,10 +112,10 @@ def get_tags(sequence):
     elif starts[1]-starts[0] == 22+k[0]: # 1 insertion in bc2
         bc2 = sequence[starts[1]-7: starts[1]]
     else:
-        return([(_tag_error, "I")])
+        return(dict([(_tag_error, "I")]))
 
     if starts[0] < 5:
-        return([(_tag_error, "D")])
+        return(dict([(_tag_error, "D")]))
     elif starts[0] == 5:
         bc1 = sequence[: starts[0]]
     else:
@@ -129,14 +130,14 @@ def get_tags(sequence):
         i += 1
     else:
         if thr > 1:
-            return([("XE", "J")])
+            return(dict([("XE", "J")]))
 
     try:
         dist_acg = hamming_dist(acg, "ACG")
     except ValueError:
         dist_acg = float("inf")
     if dist_acg > 1:
-        return([(_tag_error, "J")])
+        return(dict([(_tag_error, "J")]))
 
     gac = sequence[starts[1]+32+k[1]: starts[1]+35+k[1]]
     try:
@@ -144,7 +145,7 @@ def get_tags(sequence):
     except ValueError:
         dist_gac = float("inf")
     if dist_gac > 1:
-        return([(_tag_error, "K")])
+        return(dict([(_tag_error, "K")]))
 
     bc3 = sequence[starts[1]+15+k[1]: starts[1]+21+k[1]]
 
@@ -154,22 +155,22 @@ def get_tags(sequence):
         if fixed:
             barcode.append(fixed)
         else:
-            return([(_tag_error, "B")])
+            return(dict([(_tag_error, "B")]))
 
     umi = sequence[starts[1]+24+k[1]: starts[1]+32+k[1]]
 
-    return([(_tag_bc, "".join(barcode)), (_tag_umi, umi)])
+    return(dict([(_tag_bc, "".join(barcode)), (_tag_umi, umi)]))
 
 def compute_summary(tags):
     # summary statistics
-    if tags[0][0] == _tag_error:
-        _error_count[tags[0][1]] = _error_count.get(tags[0][1], 0) + 1
-    elif tags[0][0] == _tag_bc:
-        _cell_count[tags[0][1]] = _cell_count.get(tags[0][1], 0) + 1
+    if tags.get(_tag_error):
+        _error_count[tags[_tag_error]] = _error_count.get(tags[_tag_error], 0) + 1
+    elif tags.get(_tag_bc):
+        _cell_count[tags[_tag_bc]] = _cell_count.get(tags[_tag_bc], 0) + 1
         _error_count["PASS"] = _error_count.get("PASS", 0) + 1
 
 def write_summary(summary_path):
-    file_name = summary_path + "_errors.csv"
+    file_name = summary_path + ".errors.csv"
     ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
     out = open(file_name, "w")
     out.write("Error\tCount\tFraction\n")
@@ -179,7 +180,7 @@ def write_summary(summary_path):
         out.write("{}\t{}\t{}\n".format(tag, count, fraction))
     out.close()
 
-    file_name = summary_path + "_cell_barcodes.csv"
+    file_name = summary_path + ".cell_barcodes.csv"
     sorted_barcodes = sorted(_cell_count, key=lambda x: _cell_count[x],
             reverse=True)
     cell_cumsum = cumsum([_cell_count[b] for b in sorted_barcodes]) / \
@@ -202,70 +203,52 @@ def main():
     _tag_error = args.tag_error
 
     bam_write_mode = "w" if args.output == "-" else "wb"
-
-    if len(args.input) == 1:
-        infile_type = "bam"
-        in_filename1 = args.input[0]
-
-    elif len(args.input) == 2:
-        infile_type = "fastq"
-        in_filename1, in_filename2 = args.input
-    else:
-        sys.exit("the heck!?")
+    in_filename1, in_filename2 = args.input
 
     # Processing ####
     _start = time.perf_counter()
-    if infile_type == 'bam':
-        in_bam1 = pysam.AlignmentFile(in_filename1, check_sq=False)
-        in_bam_iter1 = islice(in_bam1.fetch(until_eof=True), None, None, 2)
-        reads = (_.query_sequence for _ in in_bam_iter1)
-
-        in_bam2 = pysam.AlignmentFile(in_filename1, check_sq=False)
-        in_bam_iter2 = islice(in_bam2.fetch(until_eof=True), 1, None, 2)
-
-    else: # fastq files
-        reads = (seq for _, seq, _ in FastqGeneralIterator(gzopen(in_filename1, "rt")))
-        in_fastq2 = (record for record in FastqGeneralIterator(gzopen(in_filename2, "rt")))
-
-        header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
-
-    if infile_type == 'bam':
-        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, template=in_bam1)
-    else: # fastq files
-        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, header=header)
+    in_seqs1 = (seq for head, seq, qual in FastqGeneralIterator(gzopen(in_filename1, "rt")))
+    in_reads2 = (record for record in FastqGeneralIterator(gzopen(in_filename2, "rt")))
 
     if args.subset: # DEBUGGING PURPOSES
-        reads = islice(reads, args.subset)
+        in_seqs1 = islice(in_seqs1, args.subset)
 
-    logging.info("Extracting tags")
+    if args.pipeline.lower() == "dropseq":
+        bam_header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
+        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, header=bam_header)
+
+    elif args.pipeline.lower() == "scpipe":
+        out_fastq = gzopen(args.output, "wt")
+
+    logging.info("Extracting tags.")
     pool = Pool(args.cores)
-    for tags in pool.imap(get_tags, reads):
-        if infile_type == "bam":
-            read2 = next(in_bam_iter2)
-            sam_record = read2
-            sam_record.template_length = len(read2.seq)
-        else:
-            title, seq, qual = next(in_fastq2)
+    for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1)):
+        if (i + 1) % 1e6 == 0:
+            logging.info("{} reads processed.".format(str(i)))
+        if args.pipeline.lower() == "dropseq":
+            title, seq, qual = next(in_reads2)
             sam_record = pysam.AlignedSegment()
             sam_record.query_name = title.split()[0]
             sam_record.query_sequence = seq
             sam_record.query_qualities = pysam.qualitystring_to_array(qual)
             sam_record.template_length = len(seq)
-        #  sam_record.flag -= (1 + 8 + 128) # remove flags: read paired, mate unmapped, second in pair
-        sam_record.flag = 4
-        sam_record.set_tags(tags)
-        out_bam.write(sam_record)
+            sam_record.flag = 4
+            sam_record.set_tags(tags.items())
+            out_bam.write(sam_record)
+        elif args.pipeline.lower() == "scpipe" and tags.get(_tag_bc):
+            title, seq, qual = next(in_reads2)
+            out_fastq.write("@{}_{}#{}\n{}\n+\n{}\n".format(tags[_tag_bc], tags[_tag_umi], title.split()[0], seq, qual))
 
         if args.summary_prefix: # summary statistics
             compute_summary(tags)
+    logging.info("{} reads processed".format(str(i+1)))
     pool.close()
-    out_bam.close()
     logging.info("All reads analyzed")
 
-    if infile_type == "bam":
-        in_bam1.close()
-        in_bam2.close()
-    out_bam.close()
+    if args.pipeline.lower() == "dropseq":
+        out_bam.close()
+    elif args.pipeline.lower() == "scpipe":
+        out_fastq.close()
 
     if args.summary_prefix:
         logging.info("Writing summary files")
@@ -280,15 +263,17 @@ def parse_args():
 
     parser = ArgumentParser(description=description)
 
-    parser.add_argument("-i", "--input", required=True, nargs="+",
-            help="Either one merged paired-end unmapped BAM file " +\
-                 "or two paired-end FASTQ files")
+    parser.add_argument("-i", "--input", nargs=2,
+            help="R1 and R2 from a paired end sequencing experiment")
     parser.add_argument("-o", "--output", required=True,
             help="Tagged unmapped BAM file (use '-' to output to stdout")
 
     barcodes_file = Path(sys.argv[0]).resolve().parent.joinpath("barcodes.txt")
     parser.add_argument("-b", "--barcodes-file", type=Path, default=barcodes_file,
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
+
+    parser.add_argument("--pipeline", default="dropseq",
+        help="Set output type depending on pipeline tool chosen")
 
     parser.add_argument("-s", "--summary-prefix",
         help="Prefix for summary files (including absolute or relative paths)")
@@ -330,18 +315,11 @@ def parse_args():
         logging.error("Tags provided with '--tag' must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
         sys.exit(1)
 
-    if not 1 <= len(args.input) <= 2:
-        logging.error("'-i/--input' expects either 1 bam file or 2 fastq files")
-        sys.exit(1)
-
-    exts = ["".join(Path(_).suffixes) for _ in args.input]
-    if len(args.input) == 1 and not all(ext in [".sam", ".bam"] for ext in exts):
-        logging.error("Invalid input file extension '{}': only '.bam' or '.sam' allowed with one input file".format(", ".join(exts)))
-        sys.exit(1)
-
-    elif len(args.input) == 2 and not all(_ in [".fastq.gz"] for _ in exts):
-        logging.error("Invalid input file extensions '{}': only '.fastq.gz' allowed with two input files".format(", ".join(exts)))
-        sys.exit(1)
+    for x in args.input:
+        ext = "".join(Path(x).suffixes)
+        if ext != ".fastq.gz":
+            logging.error("Invalid input file extensions '{}': '.fastq.gz' is required".format(ext))
+            sys.exit(1)
 
     return(args)
 
