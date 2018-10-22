@@ -4,7 +4,7 @@ import logging
 import sys
 import time
 import pysam
-from argparse import ArgumentParser, ArgumentTypeError
+from argparse import ArgumentParser
 from pathlib import Path
 from functools import partial
 from re import match as re_match
@@ -168,8 +168,8 @@ def compute_summary(tags):
         _cell_count[tags[0][1]] = _cell_count.get(tags[0][1], 0) + 1
         _error_count["PASS"] = _error_count.get("PASS", 0) + 1
 
-def write_summary(summary):
-    file_name = summary + "_errors.csv"
+def write_summary(summary_path):
+    file_name = summary_path + "_errors.csv"
     ordered_tags = ["LX", "L1", "L2", "I", "D", "J", "K", "B", "PASS"]
     out = open(file_name, "w")
     out.write("Error\tCount\tFraction\n")
@@ -179,7 +179,7 @@ def write_summary(summary):
         out.write("{}\t{}\t{}\n".format(tag, count, fraction))
     out.close()
 
-    file_name = summary + "_cell_barcodes.csv"
+    file_name = summary_path + "_cell_barcodes.csv"
     sorted_barcodes = sorted(_cell_count, key=lambda x: _cell_count[x],
             reverse=True)
     cell_cumsum = cumsum([_cell_count[b] for b in sorted_barcodes]) / \
@@ -191,20 +191,8 @@ def write_summary(summary):
             cell_cumsum[i]))
     out.close()
 
-def main(argv=None):
-    if not argv:
-        argv = sys.argv[1:]
-
-    # Parameters #####
-    args = parse_args(argv)
-
-    global _barcodes
-    try:
-        _barcodes = [_.rstrip().split()[0] for _ in args.barcodes_file.open().readlines()[:96]]
-    except FileNotFoundError:
-        logging.error("'{}' file not found. ".format(args.barcodes_file) + \
-              "Specify file path using the -b option or run 'ddSeeker_barcodes.py' to create it.")
-        sys.exit(1)
+def main():
+    args = parse_args()
 
     global _tag_bc
     global _tag_umi
@@ -213,41 +201,21 @@ def main(argv=None):
     _tag_umi   = args.tag_umi
     _tag_error = args.tag_error
 
-    # check parameters
-    if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
-        raise ArgumentTypeError("tags provided with '--tag' must be unique.")
-
-    tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
-    if not (re_match(tag_pattern, args.tag_bc) and re_match(tag_pattern, args.tag_umi) and re_match(tag_pattern, args.tag_error)):
-        raise ArgumentTypeError("tags provided with '--tag' must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
+    bam_write_mode = "w" if args.output == "-" else "wb"
 
     if len(args.input) == 1:
+        infile_type = "bam"
         in_filename1 = args.input[0]
-        ext1 = Path(args.input[0]).suffixes
-        if ext1[-1] == ".bam" or ext1[-1] == ".sam":
-            file_type = "bam"
-        else:
-            raise IOError("Using one input file requires it to have .bam/.sam extension")
 
     elif len(args.input) == 2:
+        infile_type = "fastq"
         in_filename1, in_filename2 = args.input
-        ext1 = Path(args.input[0]).suffixes
-        ext2 = Path(args.input[1]).suffixes
-
-        if ext1[-1] == ext2[-1] and ext1[-2] == ".fastq" and ext1[-1] == ".gz":
-            file_type = "fastq"
-        else:
-            raise IOError("Using two input files requires both of them to have .fastq.gz extension")
-    elif len(args.input) > 2:
-        raise ArgumentTypeError("'-i/--input' expects either 1 bam file or 2 fastq files")
     else:
-        raise IOError("Unrecognized input file extension '{}'".format(ext1[-1]))
-
-    bam_write_mode = "w" if args.output == "-" else "wb"
+        sys.exit("the heck!?")
 
     # Processing ####
     _start = time.perf_counter()
-    if file_type == 'bam':
+    if infile_type == 'bam':
         in_bam1 = pysam.AlignmentFile(in_filename1, check_sq=False)
         in_bam_iter1 = islice(in_bam1.fetch(until_eof=True), None, None, 2)
         reads = (_.query_sequence for _ in in_bam_iter1)
@@ -255,12 +223,15 @@ def main(argv=None):
         in_bam2 = pysam.AlignmentFile(in_filename1, check_sq=False)
         in_bam_iter2 = islice(in_bam2.fetch(until_eof=True), 1, None, 2)
 
-        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, template=in_bam1)
     else: # fastq files
         reads = (seq for _, seq, _ in FastqGeneralIterator(gzopen(in_filename1, "rt")))
         in_fastq2 = (record for record in FastqGeneralIterator(gzopen(in_filename2, "rt")))
 
         header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
+
+    if infile_type == 'bam':
+        out_bam = pysam.AlignmentFile(args.output, bam_write_mode, template=in_bam1)
+    else: # fastq files
         out_bam = pysam.AlignmentFile(args.output, bam_write_mode, header=header)
 
     if args.subset: # DEBUGGING PURPOSES
@@ -269,7 +240,7 @@ def main(argv=None):
     logging.info("Extracting tags")
     pool = Pool(args.cores)
     for tags in pool.imap(get_tags, reads):
-        if file_type == "bam":
+        if infile_type == "bam":
             read2 = next(in_bam_iter2)
             sam_record = read2
             sam_record.template_length = len(read2.seq)
@@ -291,7 +262,7 @@ def main(argv=None):
     out_bam.close()
     logging.info("All reads analyzed")
 
-    if file_type == "bam":
+    if infile_type == "bam":
         in_bam1.close()
         in_bam2.close()
     out_bam.close()
@@ -303,13 +274,13 @@ def main(argv=None):
     _end = time.perf_counter()
     logging.info("Done. Elapsed time: {} minutes.".format(round((_end-_start)/60, 2)))
 
-def parse_args(args):
+def parse_args():
     description = "A tool to extract cellular and molecular identifiers " +\
         "from single cell RNA sequencing experiments"
 
     parser = ArgumentParser(description=description)
 
-    parser.add_argument("-i", "--input", required=True, nargs="*",
+    parser.add_argument("-i", "--input", required=True, nargs="+",
             help="Either one merged paired-end unmapped BAM file " +\
                  "or two paired-end FASTQ files")
     parser.add_argument("-o", "--output", required=True,
@@ -340,6 +311,37 @@ def parse_args(args):
     parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.9.0')
 
     args = parser.parse_args()
+
+    # check parameters
+    global _barcodes
+    try:
+        _barcodes = [_.rstrip().split()[0] for _ in args.barcodes_file.open().readlines()[:96]]
+    except FileNotFoundError:
+        logging.error("'{}' file not found. ".format(args.barcodes_file) + \
+              "Specify file path using the -b option or run 'ddSeeker_barcodes.py' to create this file.")
+        sys.exit(1)
+
+    if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
+        logging.error("Tags provided with '--tag' must be all different.")
+        sys.exit(1)
+
+    tag_pattern = "^[A-Za-z][A-Za-z0-90]$"
+    if not (re_match(tag_pattern, args.tag_bc) and re_match(tag_pattern, args.tag_umi) and re_match(tag_pattern, args.tag_error)):
+        logging.error("Tags provided with '--tag' must be two-character strings matching /[A-Za-z][A-Za-z0-9]/")
+        sys.exit(1)
+
+    if not 1 <= len(args.input) <= 2:
+        logging.error("'-i/--input' expects either 1 bam file or 2 fastq files")
+        sys.exit(1)
+
+    exts = ["".join(Path(_).suffixes) for _ in args.input]
+    if len(args.input) == 1 and not all(ext in [".sam", ".bam"] for ext in exts):
+        logging.error("Invalid input file extension '{}': only '.bam' or '.sam' allowed with one input file".format(", ".join(exts)))
+        sys.exit(1)
+
+    elif len(args.input) == 2 and not all(_ in [".fastq.gz"] for _ in exts):
+        logging.error("Invalid input file extensions '{}': only '.fastq.gz' allowed with two input files".format(", ".join(exts)))
+        sys.exit(1)
 
     return(args)
 
