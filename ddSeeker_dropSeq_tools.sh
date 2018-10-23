@@ -32,21 +32,22 @@ reference=
 pipeline=0
 ncores=1
 echo_prefix=
-dropseq_root=$(dirname $0)
-star_executable=STAR
+dropseq_root=
+star_executable="STAR"
+ddSeeker_executable="ddSeeker.py"
 progname=`basename $0`
 
 function usage () {
     cat >&2 <<EOF
-USAGE: $progname [options] <unmapped-queryname-sorted.bam>
+USAGE: $progname [options] <R1_fastq.gz> <R2_fastq.gz>
 Perform tagging, filtering and alignment
 
--d <dropseq_root>   : Directory containing Drop-seq executables.  Default: directory containing this script.
+-d <dropseq_root>   : Directory containing Drop-seq executables.  Required.
 -o <outputdir>      : Where to write output bam.  Default: current directory.
 -g <genomedir>      : Directory of STAR genome directory.  Required.
 -r <referencefasta> : Reference fasta of the Drop-seq reference metadata bundle.  Required.
--s <STAR_path>      : Full path of STAR.  Default: STAR is found via PATH environment variable.
--k <ddSeeker_path>  : Full path of ddSeeker.  Default: ddSeeker is found via PATH environment variable.
+-s <STAR_path>      : Full path of STAR.  Default: 'STAR'
+-k <ddSeeker_path>  : Full path of ddSeeker.  Default: 'ddSeeker.py'
 -n <num-cores>      : Number of CPUs unit for parallel computation.  Default: 1.
 -t <tmpdir>         : Where to write temporary files.  Default: a new subdirectory in /tmp
 -e                  : Echo commands instead of executing them.  Cannot use with -p.
@@ -72,15 +73,14 @@ function check_set() {
     fi
 }
 
-
-while getopts ":d:k:g:n:o:r:s:t:eph" options; do
+while getopts ":d:o:g:r:s:k:n:t:eph" options; do
   case $options in
     d ) dropseq_root=$OPTARG;;
     o ) outdir=$OPTARG;;
     g ) genomedir=$OPTARG;;
     r ) reference=$OPTARG;;
-    k ) ddseeker_executable=$OPTARG;;
     s ) star_executable=$OPTARG;;
+    k ) ddseeker_executable=$OPTARG;;
     n ) ncores=$OPTARG;;
     t ) tmpdir=$OPTARG;;
     e ) echo_prefix="echo";;
@@ -103,7 +103,7 @@ check_set "$dropseq_root" "Drop-seq root" "-d"
 check_set "$genomedir" "Genome directory" "-g"
 check_set "$reference" "Reference fasta"  "-r"
 
-if (( $# != 1 )); then
+if (( $# != 2 )); then
     error_exit "Incorrect number of arguments"
 fi
 
@@ -125,8 +125,10 @@ fi
 refflat=${reference%.fa*}.refFlat
 picard_jar=${dropseq_root}/3rdParty/picard/picard.jar
 
-unmapped_bam=$1
+r1_fastq=$1
+r2_fastq=$2
 unaligned_tagged_bam=${tmpdir}/unaligned_tagged.bam
+unaligned_tagged_qsorted_bam=${tmpdir}/unaligned_tagged_qsorted.bam
 unaligned_tagged_filtered_bam=${tmpdir}/unaligned_tagged_filtered.bam
 unaligned_tagged_filtered_fastq=${tmpdir}/unaligned_tagged_filtered.fastq
 aligned_sam=${tmpdir}/star.Aligned.out.sam
@@ -134,7 +136,8 @@ aligned_sorted_bam=${tmpdir}/aligned_sorted.bam
 files_to_delete="${unaligned_tagged_filtered_bam} ${aligned_sorted_bam} ${aligned_sam}"
 
 # Stage 1: pre-alignment tag and trim
-tag_reads="${ddseeker_executable} ${unmapped_bam} --summary ${outdir}/unaligned_tagged_summary --ncores ${ncores}"
+tag_reads="${ddseeker_executable} -i ${r1_fastq} ${r2_fastq} -c ${ncores} --subset 1000"
+qsort_tagged="java -jar ${picard_jar} SortSam SORT_ORDER=queryname TMP_DIR=${tmpdir}"
 filter_bam="${dropseq_root}/FilterBAM TAG_REJECT=XE"
 
 # Stage 2: alignment
@@ -144,8 +147,7 @@ star_align="$star_executable --genomeDir ${genomedir} --runThreadN $ncores
     --outFileNamePrefix ${tmpdir}/star."
 
 # Stage 3: sort aligned reads (STAR does not necessarily emit reads in the same order as the input)
-sort_aligned="java -Dsamjdk.buffer_size=131072 -XX:GCTimeLimit=50
-    -XX:GCHeapFreeLimit=10 -Xmx4000m -jar ${picard_jar} SortSam
+qsort_aligned="java -jar ${picard_jar} SortSam
     I=${aligned_sam} O=${aligned_sorted_bam} SORT_ORDER=queryname
     TMP_DIR=${tmpdir}"
 
@@ -159,23 +161,25 @@ tag_with_gene_exon="${dropseq_root}/TagReadWithGeneExon
 
 if (( $pipeline == 1 )); then
     # Stage 1
-    $tag_reads --output-bam "-" | \
+    echo stage1
+    $tag_reads -o - | \
+      $qsort_tagged I=/dev/stdin O=/dev/stdout | \
         $filter_bam I=/dev/stdin O=${unaligned_tagged_filtered_bam}
 
+    exit
     # Stage 2
-    $sam_to_fastq FASTQ=/dev/stdout | \
-        $star_align --readFilesIn /dev/stdin
+    $sam_to_fastq FASTQ=/dev/stdout | $star_align --readFilesIn /dev/stdin
 
     # Stage 3
-    $sort_aligned
+    $qsort_aligned
 
     # Stage 4
-    $merge_bam O=/dev/stdout COMPRESSION_LEVEL=0 | \
-        $tag_with_gene_exon I=/dev/stdin
+    $merge_bam O=/dev/stdout COMPRESSION_LEVEL=0 | $tag_with_gene_exon I=/dev/stdin
 else
     # Stage 1
-    $echo_prefix $tag_reads --output-bam $unaligned_tagged_bam
-    $echo_prefix $filter_bam I=$unaligned_tagged_bam O=$unaligned_tagged_filtered_bam
+    $echo_prefix $tag_reads -o $unaligned_tagged_bam
+    $echo_prefix $qsort_tagged I=$unaligned_tagged_bam O=$unaligned_tagged_qsorted_bam
+    $echo_prefix $filter_bam I=$unaligned_tagged_qsorted_bam O=$unaligned_tagged_filtered_bam
     files_to_delete="$files_to_delete $unaligned_tagged_bam"
 
     # Stage 2
@@ -184,7 +188,7 @@ else
     files_to_delete="$files_to_delete $unaligned_tagged_filtered_fastq"
 
     # Stage 3
-    $echo_prefix $sort_aligned
+    $echo_prefix $qsort_aligned
 
     # Stage 4
     $echo_prefix $merge_bam O=$tmpdir/merged.bam
