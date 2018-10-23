@@ -131,7 +131,7 @@ aligned_sorted_bam=${tmpdir}/aligned_sorted.bam
 files_to_delete="${unaligned_tagged_filtered_bam} ${aligned_sorted_bam} ${aligned_sam}"
 
 # Stage 1: pre-alignment tag and trim
-tag_reads="${ddseeker_executable} -i ${r1_fastq} ${r2_fastq} -c ${ncores} --subset 1000"
+tag_reads="${ddseeker_executable} -i ${r1_fastq} ${r2_fastq} -c ${ncores}"
 qsort_tagged="java -jar ${picard_jar} SortSam SORT_ORDER=queryname TMP_DIR=${tmpdir}"
 filter_bam="${dropseq_root}/FilterBAM TAG_REJECT=XE"
 
