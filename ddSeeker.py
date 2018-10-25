@@ -212,11 +212,11 @@ def main():
     if args.subset: # DEBUGGING PURPOSES
         in_seqs1 = islice(in_seqs1, args.subset)
 
-    if args.pipeline.lower() == "dropseq":
+    if args.pipeline == "dropseq":
         bam_header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
         out_bam = pysam.AlignmentFile(args.output, bam_write_mode, header=bam_header)
 
-    elif args.pipeline.lower() == "scpipe":
+    elif args.pipeline == "scpipe":
         out_fastq = gzopen(args.output, "wt")
 
     logging.info("Extracting tags.")
@@ -224,7 +224,7 @@ def main():
     for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1), 1):
         if (i) % 1e6 == 0:
             logging.info("{} reads processed.".format(str(i)))
-        if args.pipeline.lower() == "dropseq":
+        if args.pipeline == "dropseq":
             title, seq, qual = next(in_reads2)
             sam_record = pysam.AlignedSegment()
             sam_record.query_name = title.split()[0]
@@ -234,23 +234,23 @@ def main():
             sam_record.flag = 4
             sam_record.set_tags(tags.items())
             out_bam.write(sam_record)
-        elif args.pipeline.lower() == "scpipe" and tags.get(_tag_bc):
+        elif args.pipeline == "scpipe" and tags.get(_tag_bc):
             title, seq, qual = next(in_reads2)
             out_fastq.write("@{}_{}#{}\n{}\n+\n{}\n".format(tags[_tag_bc], tags[_tag_umi], title.split()[0], seq, qual))
 
         if args.summary_prefix: # summary statistics
             compute_summary(tags)
-    logging.info("{} reads processed".format(str(i)))
+    logging.info("{} reads processed.".format(str(i)))
     pool.close()
-    logging.info("All reads analyzed")
+    logging.info("All reads analyzed.")
 
-    if args.pipeline.lower() == "dropseq":
+    if args.pipeline == "dropseq":
         out_bam.close()
-    elif args.pipeline.lower() == "scpipe":
+    elif args.pipeline == "scpipe":
         out_fastq.close()
 
     if args.summary_prefix:
-        logging.info("Writing summary files")
+        logging.info("Writing summary files.")
         write_summary(args.summary_prefix)
 
     _end = time.perf_counter()
@@ -271,7 +271,7 @@ def parse_args():
     parser.add_argument("-b", "--barcodes-file", type=Path, default=barcodes_file,
         help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
 
-    parser.add_argument("--pipeline", default="dropseq",
+    parser.add_argument("--pipeline", default="dropseq", choices=["dropseq", "scpipe"],
         help="Set output type depending on pipeline tool chosen")
 
     parser.add_argument("-s", "--summary-prefix",
@@ -290,7 +290,7 @@ def parse_args():
         help="Tag for errors (default=XE)")
 
     parser.add_argument("--subset", type=int,
-        help="Select a lower number of reads to analyze [for debugging purposes]")
+        help="Select a lower number of reads to analyze [debugging]")
 
     parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.9.0')
 
