@@ -11,8 +11,7 @@ from re import match as re_match
 from numpy import cumsum
 from multiprocessing import Pool
 from itertools import islice
-from Bio import pairwise2, SeqIO
-from Bio.SeqRecord import SeqRecord
+from Bio import pairwise2
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from gzip import open as gzopen
 
@@ -222,8 +221,8 @@ def main():
 
     logging.info("Extracting tags.")
     pool = Pool(args.cores)
-    for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1)):
-        if (i + 1) % 1e6 == 0:
+    for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1), 1):
+        if (i) % 1e6 == 0:
             logging.info("{} reads processed.".format(str(i)))
         if args.pipeline.lower() == "dropseq":
             title, seq, qual = next(in_reads2)
@@ -241,7 +240,7 @@ def main():
 
         if args.summary_prefix: # summary statistics
             compute_summary(tags)
-    logging.info("{} reads processed".format(str(i+1)))
+    logging.info("{} reads processed".format(str(i)))
     pool.close()
     logging.info("All reads analyzed")
 
