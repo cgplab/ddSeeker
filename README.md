@@ -58,11 +58,11 @@ which should be already installed if you are using Python3 >= 3.4.
 
     ddSeeker.py --input sampleA_R1.fastq.gz sampleA_R2.fastq.gz --output sampleA_tagged.bam --cores 20
 
-##### Print to stdout (use '-') and pipe to samtools for queryname sorting
+##### Print to stdout and pipe to samtools for queryname sorting
 
     ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
-##### Generate summary files and plots
+##### Generate summary files and make graphs
 Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
 Three plots are generated: dot plot of error distribution, absolute count of reads per
 cell, and cumulative distribution of reads per cell. The latter two report by default
