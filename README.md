@@ -37,6 +37,7 @@ Users can manually set different tags (see #additional-optionts).
 
 ### Install ddSeeker
 Clone the repository and add the folder to your PATH variable
+
     git clone https://github.com/cgplab/ddSeeker.git
     export PATH=<path_to_ddSeeker>:$PATH
 
