@@ -11,7 +11,7 @@ file containing reads tagged with cell barcodes and unique molecular identifiers
 Default [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F) are
 **XB** and **XU** for cell barcodes and UMI, and **XE** for errors related to
 the barcode identification.
-Users can manually set different tags (see #additional-optionts).
+Users can manually set different tags (see #additional-options).
 
 #### Errors in barcode identification
 
