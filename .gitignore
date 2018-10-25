@@ -1,2 +1,3 @@
 __pycache__/
-barcodes.txt
+test*/
+pipelines/

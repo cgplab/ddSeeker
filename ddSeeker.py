@@ -24,6 +24,7 @@ _global_aligner = partial(pairwise2.align.globalxs, score_only=True, one_alignme
 _cell_count={}
 _error_count = {}
 
+
 def hamming_dist(s1, s2):
     """Return the Hamming distance between equal-length sequences
 
@@ -267,10 +268,6 @@ def parse_args():
     parser.add_argument("-o", "--output", required=True,
             help="Tagged unmapped BAM file (use '-' to output to stdout")
 
-    barcodes_file = Path(sys.argv[0]).resolve().parent.joinpath("barcodes.txt")
-    parser.add_argument("-b", "--barcodes-file", type=Path, default=barcodes_file,
-        help="Barcode blocks file (default=<ddSeeker_path>/barcodes.txt")
-
     parser.add_argument("--pipeline", default="dropseq", choices=["dropseq", "scpipe"],
         help="Set output type depending on pipeline tool chosen")
 
@@ -296,15 +293,11 @@ def parse_args():
 
     args = parser.parse_args()
 
-    # check parameters
     global _barcodes
-    try:
-        _barcodes = [_.rstrip().split()[0] for _ in args.barcodes_file.open().readlines()[:96]]
-    except FileNotFoundError:
-        logging.error("'{}' file not found. ".format(args.barcodes_file) + \
-              "Specify file path using the -b option or run 'ddSeeker_barcodes.py' to create this file.")
-        sys.exit(1)
+    barcodes_file = Path(sys.argv[0]).resolve().parent.joinpath("barcodes.txt")
+    _barcodes = barcodes_file.open().read().split()
 
+    # check parameters
     if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
         logging.error("Tags provided with '--tag' must be all different.")
         sys.exit(1)
