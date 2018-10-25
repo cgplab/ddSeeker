@@ -1,19 +1,19 @@
 # ddSeeker
 A tool for processing Bio-Rad ddSEQ single cell RNA-seq data.
 
-# Description
-*ddSeeker* identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
+### Description
+**ddSeeker** identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
 
-*Input*: R1 and R2 FASTQ files from paired-end read single cell sequencing experiment
+**Input**: R1 and R2 FASTQ files from a paired-end single cell sequencing experiment.
 
-*Output*: one ([unmapped BAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format))
+**Output**: one [unmapped BAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format)
 file containing reads tagged with cell barcodes and unique molecular identifiers (UMI).
 Default [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F) are
 **XB** and **XU** for cell barcodes and UMI, and **XE** for errors related to
 the barcode identification.
-Users can manually set different tags (see Additional optionts).
+Users can manually set different tags (see #additional-optionts).
 
-###### Errors in barcode identification
+#### Errors in barcode identification
 
     - LX = both linkers not aligned correctly
     - L1 = linker 1 not aligned correctly
@@ -24,7 +24,7 @@ Users can manually set different tags (see Additional optionts).
     - K  = indel in UMI or GAC trinucleotide
     - B  = one BC with more than 1 mismatch
 
-##### Additional options
+#### Additional options
 
   - Increment number of CPU units (faster analysis) with `-c/--cores`.
   - Manually set tags with `--tag-bc`, `--tag-umi` and `--tag-error`.
@@ -35,12 +35,12 @@ Users can manually set different tags (see Additional optionts).
   - Create plots from the csv summary files using `make_graphs.R` (see ).
 
 
-## Install ddSeeker
-Download the latest release from
-    tar xvzf ddSeeker-v.tar.gz
+### Install ddSeeker
+Clone the repository and add the folder to your PATH variable
+    git clone https://github.com/cgplab/ddSeeker.git
     export PATH=<path_to_ddSeeker>:$PATH
 
-## Dependencies
+### Dependencies
 - [Python](https://www.python.org/downloads) (>= 3.5)
 - [Biopython](http://biopython.org) (>= 1.71)
 - [pysam](https://pysam.readthedocs.io) (>= 0.14)
@@ -54,51 +54,51 @@ which should be already installed if you are using Python3 >= 3.4.
 
 ## Usage examples
 
-###### ddSeeker with 20 cores
+##### ddSeeker with 20 cores
 
     ddSeeker.py --input sampleA_R1.fastq.gz sampleA_R2.fastq.gz --output sampleA_tagged.bam --cores 20
 
-###### Print to stdout (use '-') and pipe to samtools for queryname sorting
+##### Print to stdout (use '-') and pipe to samtools for queryname sorting
 
     ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
-###### Generate summary files and plots
-Requires [R >=3.4](https://www.r-project.org/) and `tidyverse` package.
+##### Generate summary files and plots
+Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
 Three plots are generated: dot plot of error distribution, absolute count of reads per
 cell, and cumulative distribution of reads per cell. The latter two report by default
 the whole set of barcodes in the csv file. To limit the report to a lower
 number, specify it from the command line.
 
-    # Rscript -e 'install.packages("tidyverse")'
     mkdir summary_folder
     ddSeeker.py -i sampleA_R* -c 20 -o sampleA_tagged.bam -s summary_folder/sampleA
     make_plot.R summary_folder/sampleA 2000
 
 ## Integrating single cell analysis pipelines
 Several pipelines have been developed to perform single cell analysis.
-Below we describe the main steps required to integrate our tool with 
+Below we describe the main steps required to integrate our tool with
 [Drop-seq tools](http://mccarrolllab.com/dropseq/),
 [scPipe](https://github.com/LuyiTian/scPipe) and
 [dropEst](https://github.com/hms-dbmi/dropEst).
 
 
-###### Drop-seq tools
-Since this was our choice for our analyses we provide a ready-to-use bash
+##### Drop-seq tools
+Since Drop-seq tools was our choice for our analyses we provide a ready-to-use bash
 script.  Simply run
 
     ddSeeker_dropSeq_tools.sh [options] sampleA_R1.fastq.gz sampleA_R2.fastq.gz
 
-to produce a table
+to produce a matrix with read counts per genes in single cells.
 
-###### scPipe
+##### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
-of each read record. To change the output of *ddSeeker* use the option `--pipeline scPipe`
+of each read record. To change the output of **ddSeeker** use the option
+`--pipeline scPipe`.
 
     ddSeeker.py -i sampleA_R* -o sampleA_tagged.fastq.gz -c 20 --pipeline scPipe
 
 In addition, set `bc_len=18` and `UMI_len=8` with the `sc_exon_mapping()` function.
 
-###### dropEst
+##### dropEst
 dropEst can work with tagged BAM files. Simply make the BamTags match with the
 ddSeeker tags specifying them in the config.xml file
 
@@ -107,5 +107,5 @@ ddSeeker tags specifying them in the config.xml file
         <umi>XU</umi>
     </BamTags>
 
-#### Citation
+## Citation
 Romagnoli et al., **ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data**, submitted
