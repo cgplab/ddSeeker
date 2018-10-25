@@ -1,3 +1,4 @@
 - [x] use two fastq files as input (read1, read2)
-- [ ] add rscript to produce graphs
-- [ ] add pipelines
+- [x] add rscript to produce graphs
+- [x] add pipelines
+- [ ] add option to filter non tagged reads
