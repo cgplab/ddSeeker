@@ -90,7 +90,7 @@ script.  Simply run
 
 to produce aligned tagged reads in BAM format. 
 Table of Counts can be obtained using the `DigitalExpression` tool included in Drop-seq tools.
-To do that, run it setiing `CELL_BARCODE_TAG=XB` and `MOLECULAR_BARCODE_TAG=XU`.
+To do that, run it setting `CELL_BARCODE_TAG=XB` and `MOLECULAR_BARCODE_TAG=XU`.
 
 ##### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
