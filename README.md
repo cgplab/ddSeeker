@@ -83,12 +83,13 @@ Below we describe the main steps required to integrate our tool with
 
 
 ##### Drop-seq tools
-Since Drop-seq tools was our choice for our analyses we provide a ready-to-use bash
+Since Drop-seq tools was our choice for our analyses, we provide a ready-to-use bash
 script.  Simply run
 
     ddSeeker_dropSeq_tools.sh [options] sampleA_R1.fastq.gz sampleA_R2.fastq.gz
 
-to produce a matrix with read counts per genes in single cells.
+to produce aligned tagged reads in BAM format which can then be used to produce a Table of Counts using 
+the `DigitalExpression` command with `CELL_BARCODE_TAG=XB` and `MOLECULAR_BARCODE_TAG=XB` flags.
 
 ##### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
