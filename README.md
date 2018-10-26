@@ -88,8 +88,9 @@ script.  Simply run
 
     ddSeeker_dropSeq_tools.sh [options] sampleA_R1.fastq.gz sampleA_R2.fastq.gz
 
-to produce aligned tagged reads in BAM format which can then be used to produce a Table of Counts using 
-the `DigitalExpression` command with `CELL_BARCODE_TAG=XB` and `MOLECULAR_BARCODE_TAG=XB` flags.
+to produce aligned tagged reads in BAM format. 
+Table of Counts can be obtained using the `DigitalExpression` tool included in Drop-seq tools.
+To do that, run it setiing `CELL_BARCODE_TAG=XB` and `MOLECULAR_BARCODE_TAG=XU`.
 
 ##### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
