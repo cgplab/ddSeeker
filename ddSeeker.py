@@ -281,7 +281,7 @@ def parse_args():
         help="Tag for single cell barcode (default=XC)")
 
     parser.add_argument("--tag-umi", type=str, default="XM",
-        help="Tag for Universal Molecular Identifier (default=XM)")
+        help="Tag for Unique Molecular Identifier (default=XM)")
 
     parser.add_argument("--tag-error", type=str, default="XE",
         help="Tag for errors (default=XE)")
