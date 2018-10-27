@@ -130,7 +130,7 @@ def get_tags(sequence):
         i += 1
     else:
         if thr > 1:
-            return(dict([("XE", "J")]))
+            return(dict([(_tag_error, "J")]))
 
     try:
         dist_acg = hamming_dist(acg, "ACG")
