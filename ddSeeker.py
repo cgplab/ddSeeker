@@ -57,8 +57,8 @@ def fix_block(block):
 def get_tags(sequence):
     """Extract barcodes from R1 and return a tuple of SAM-format TAGs.
     Default tag values:
-    - XB = barcode
-    - XU = UMI
+    - XC = cell barcode
+    - XM = molecular barcode (UMI)
     - XE = error
 
     Errors:
@@ -277,11 +277,11 @@ def parse_args():
     parser.add_argument("-c","--cores", type=int, default=1,
         help="Number of processing units (CPUs) to use (default=1)")
 
-    parser.add_argument("--tag-bc", type=str, default="XB",
-        help="Tag for single cell barcode (default=XB)")
+    parser.add_argument("--tag-bc", type=str, default="XC",
+        help="Tag for single cell barcode (default=XC)")
 
-    parser.add_argument("--tag-umi", type=str, default="XU",
-        help="Tag for Universal Molecular Identifier (default=XU)")
+    parser.add_argument("--tag-umi", type=str, default="XM",
+        help="Tag for Universal Molecular Identifier (default=XM)")
 
     parser.add_argument("--tag-error", type=str, default="XE",
         help="Tag for errors (default=XE)")

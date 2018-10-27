@@ -105,8 +105,8 @@ dropEst can work with tagged BAM files. Simply make the BamTags match with the
 ddSeeker tags specifying them in the config.xml file
 
     <BamTags>
-        <cb>XB</cb>
-        <umi>XU</umi>
+        <cb>XC</cb>
+        <umi>XM</umi>
     </BamTags>
 
 ## Citation
