@@ -72,7 +72,7 @@ number, specify it from the command line.
 
     mkdir summary_folder
     ddSeeker.py -i sampleA_R* -c 20 -o sampleA_tagged.bam -s summary_folder/sampleA
-    make_plot.R summary_folder/sampleA 2000
+    make_graphs.R summary_folder/sampleA 2000
 
 ## Integrating single cell analysis pipelines
 Several pipelines have been developed to perform single cell analysis.
