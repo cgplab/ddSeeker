@@ -108,6 +108,3 @@ ddSeeker tags specifying them in the config.xml file
         <cb>XC</cb>
         <umi>XM</umi>
     </BamTags>
-
-[//]: # ## Citation
-[//]: # Romagnoli et al., **ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data**, submitted
