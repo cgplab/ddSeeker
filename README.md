@@ -1,6 +1,3 @@
-# Citation
-[ddSeeker: a tool for processing Bio-RadddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
-
 ### Description
 **ddSeeker** identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
 
@@ -108,3 +105,10 @@ ddSeeker tags specifying them in the config.xml file
         <cb>XC</cb>
         <umi>XM</umi>
     </BamTags>
+
+## Link to the paper
+[ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
+
+## Citation
+Romagnoli D*, Boccalini G*, Bonechi M, Biagioni C, Fassan P, Bertorelli R, De Sanctis V, Di Leo A, Migliaccio I, Malorni L, Benelli M. *ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data*. BMC Genomics. 2018; 19:960
+
