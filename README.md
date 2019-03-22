@@ -1,6 +1,4 @@
 # ddSeeker
-## Citation
-[ddSeeker: a tool for processing Bio-RadddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
 
 ## Description
 **ddSeeker** extracts cellular and molecular identifiers from single cell RNA sequencing experiments.
@@ -109,9 +107,18 @@ ddSeeker tags specifying them in the config.xml file
         <umi>XM</umi>
     </BamTags>
 
+## Citation
+Romagnoli D\*, Boccalini G\*, Bonechi M, Biagioni C, Fassan P, Bertorelli R, De
+Sanctis V, Di Leo A, Migliaccio I, Malorni L, Benelli M. *ddSeeker: a tool for
+processing Bio-Rad ddSEQ single cell RNA-seq data*. BMC Genomics. 2018; 19:960
+
+Link to the paper: [ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
+
+
 ## Update (2019-03-22): split bam files
 While performing further analyses on our scRNA-seq data, we had the need to
 create separate bam files for each single cell. 
 We wrote a script (`split_bam.py`)to perform this simple but not trivial task
 and we are sharing it here with the community.
 Requires [simplesam](https://github.com/mdshw5/simplesam).
+
