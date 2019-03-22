@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
 import logging
+import pysam
 import sys
 import time
-import pysam
 from argparse import ArgumentParser
-from pathlib import Path
-from functools import partial
-from re import match as re_match
-from numpy import cumsum
-from multiprocessing import Pool
-from itertools import islice
 from Bio import pairwise2
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
+from functools import partial
 from gzip import open as gzopen
+from itertools import islice
+from multiprocessing import Pool
+from numpy import cumsum
+from pathlib import Path
+from re import match as re_match
 
 logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S',
                     format="[%(asctime)s] %(levelname)s - %(message)s")
