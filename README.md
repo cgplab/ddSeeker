@@ -48,7 +48,6 @@ Clone the repository and add the folder to your PATH variable
 We suggest to install python packages using [pip](https://pip.pypa.io/en/stable/installing/)
 which should be already installed if you are using Python3 >= 3.4.
 
-    pip install -U pip  # upgrade pip
     pip install biopython
     pip install pysam
 
@@ -56,11 +55,11 @@ which should be already installed if you are using Python3 >= 3.4.
 
 - __ddSeeker with 20 cores__
 
-    ddSeeker.py --input sampleA_R1.fastq.gz sampleA_R2.fastq.gz --output sampleA_tagged.bam --cores 20
+      ddSeeker.py --input sampleA_R1.fastq.gz sampleA_R2.fastq.gz --output sampleA_tagged.bam --cores 20
 
 - __Print to stdout and pipe to samtools for queryname sorting__
 
-    ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
+      ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
 ### Generate summary files and make graphs
 Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
