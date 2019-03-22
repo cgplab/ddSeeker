@@ -1,30 +1,31 @@
-# Citation
+# ddSeeker
+## Citation
 [ddSeeker: a tool for processing Bio-RadddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
 
-### Description
-**ddSeeker** identifies cellular and molecular identifiers from single cell RNA sequencing experiments.
+## Description
+**ddSeeker** extracts cellular and molecular identifiers from single cell RNA sequencing experiments.
 
 **Input**: R1 and R2 FASTQ files from a paired-end single cell sequencing experiment.
 
-**Output**: one [unmapped BAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format)
-file containing reads tagged with cell barcodes and unique molecular identifiers (UMI).
+**Output**: one unmapped BAM ([uBAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format))
+file containing reads tagged with cell barcodes and Unique Molecular Identifiers (UMI).
 Default [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F) are
 **XC** and **XM** for cell barcodes and UMI, and **XE** for errors related to
 the barcode identification.
 Users can manually set different tags (see [Additional options](https://github.com/cgplab/ddSeeker#additional-options)).
 
-#### Errors in barcode identification
+### Errors in barcode identification
 
-    - LX = both linkers not aligned correctly
-    - L1 = linker 1 not aligned correctly
-    - L2 = linker 2 not aligned correctly
-    - I  = indel in BC2
-    - D  = deletion in Phase Block or BC1
-    - J  = indel in BC3 or ACG trinucleotide
-    - K  = indel in UMI or GAC trinucleotide
-    - B  = one BC with more than 1 mismatch
+  - LX = both linkers not aligned correctly
+  - L1 = linker 1 not aligned correctly
+  - L2 = linker 2 not aligned correctly
+  - I  = indel in BC2
+  - D  = deletion in Phase Block or BC1
+  - J  = indel in BC3 or ACG trinucleotide
+  - K  = indel in UMI or GAC trinucleotide
+  - B  = one BC with more than 1 mismatch
 
-#### Additional options
+## Additional options
 
   - Increment number of CPU units (faster analysis) with `-c/--cores`.
   - Manually set tags with `--tag-bc`, `--tag-umi` and `--tag-error`.
@@ -35,7 +36,7 @@ Users can manually set different tags (see [Additional options](https://github.c
   - Create plots from the csv summary files using `make_graphs.R` (see ).
 
 
-### Install ddSeeker
+## Installation & Usage
 Clone the repository and add the folder to your PATH variable
 
     git clone https://github.com/cgplab/ddSeeker.git
@@ -53,17 +54,17 @@ which should be already installed if you are using Python3 >= 3.4.
     pip install biopython
     pip install pysam
 
-## Usage examples
+### Examples
 
-##### ddSeeker with 20 cores
+- __ddSeeker with 20 cores__
 
     ddSeeker.py --input sampleA_R1.fastq.gz sampleA_R2.fastq.gz --output sampleA_tagged.bam --cores 20
 
-##### Print to stdout and pipe to samtools for queryname sorting
+- __Print to stdout and pipe to samtools for queryname sorting__
 
     ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
-##### Generate summary files and make graphs
+### Generate summary files and make graphs
 Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
 Three plots are generated: dot plot of error distribution, absolute count of reads per
 cell, and cumulative distribution of reads per cell. The latter two report by default
@@ -74,15 +75,14 @@ number, specify it from the command line.
     ddSeeker.py -i sampleA_R* -c 20 -o sampleA_tagged.bam -s summary_folder/sampleA
     make_graphs.R summary_folder/sampleA 2000
 
-## Integrating single cell analysis pipelines
+### Integrating single cell analysis pipelines
 Several pipelines have been developed to perform single cell analysis.
 Below we describe the main steps required to integrate our tool with
 [Drop-seq tools](http://mccarrolllab.com/dropseq/),
 [scPipe](https://github.com/LuyiTian/scPipe) and
 [dropEst](https://github.com/hms-dbmi/dropEst).
 
-
-##### Drop-seq tools
+#### Drop-seq tools
 Since Drop-seq tools was our choice for our analyses, we provide a ready-to-use bash
 script.  Simply run
 
@@ -91,7 +91,7 @@ script.  Simply run
 to produce aligned tagged reads in BAM format. 
 Table of Counts can be obtained using the `DigitalExpression` tool included in Drop-seq tools.
 
-##### scPipe
+#### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
 of each read record. To change the output of **ddSeeker** use the option
 `--pipeline scPipe`.
@@ -100,7 +100,7 @@ of each read record. To change the output of **ddSeeker** use the option
 
 In addition, set `bc_len=18` and `UMI_len=8` with the `sc_exon_mapping()` function.
 
-##### dropEst
+#### dropEst
 dropEst can work with tagged BAM files. Simply make the BamTags match with the
 ddSeeker tags specifying them in the config.xml file
 
@@ -108,3 +108,10 @@ ddSeeker tags specifying them in the config.xml file
         <cb>XC</cb>
         <umi>XM</umi>
     </BamTags>
+
+## Update (2019-03-22): split bam files
+While performing further analyses on our scRNA-seq data, we had the need to
+create separate bam files for each single cell. 
+We wrote a script (`split_bam.py`)to perform this simple but not trivial task
+and we are sharing it here with the community.
+Requires [simplesam](https://github.com/mdshw5/simplesam).
