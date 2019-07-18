@@ -61,6 +61,9 @@ which should be already installed if you are using Python3 >= 3.4.
 
       ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
+### Test dataset
+`https://github.com/cgplab/ddSeeker_example_dataset`
+
 ### Generate summary files and make graphs
 Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
 Three plots are generated: dot plot of error distribution, absolute count of reads per
@@ -117,7 +120,7 @@ Link to the paper: [ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RN
 ## Update (2019-03-22): split bam files
 While performing further analyses on our scRNA-seq data, we had the need to
 create separate bam files for each single cell. 
-We wrote a script (`split_bam.py`)to perform this simple but not trivial task
+We wrote a script (`split_bam.py`) to perform this simple but not trivial task
 and we are sharing it here with the community.
 Requires [simplesam](https://github.com/mdshw5/simplesam).
 

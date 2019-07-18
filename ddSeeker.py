@@ -24,7 +24,6 @@ _global_aligner = partial(pairwise2.align.globalxs, score_only=True, one_alignme
 _cell_count={}
 _error_count = {}
 
-
 def hamming_dist(s1, s2):
     """Return the Hamming distance between equal-length sequences
 
@@ -266,7 +265,7 @@ def parse_args():
     parser.add_argument("-i", "--input", nargs=2,
             help="R1 and R2 from a paired end sequencing experiment")
     parser.add_argument("-o", "--output", required=True,
-            help="Tagged unmapped BAM file (use '-' to output to stdout")
+            help="Tagged unmapped BAM file (use '-' to output to stdout)")
 
     parser.add_argument("--pipeline", default="dropseq", choices=["dropseq", "scpipe"],
         help="Set output type depending on pipeline tool chosen")
