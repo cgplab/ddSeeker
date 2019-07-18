@@ -62,7 +62,7 @@ which should be already installed if you are using Python3 >= 3.4.
       ddSeeker.py -i sampleA_R* -c 20 -o - | samtools sort -no sampleA_tagged_qsorted.bam
 
 ### Test dataset
-`https://github.com/cgplab/ddSeeker_example_dataset`
+[https://github.com/cgplab/ddSeeker_example_dataset](https://github.com/cgplab/ddSeeker_example_dataset)
 
 ### Generate summary files and make graphs
 Requires [R >=3.4](https://www.r-project.org/) and the [tidyverse](https://www.tidyverse.org/) package.
