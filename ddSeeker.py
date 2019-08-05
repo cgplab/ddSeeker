@@ -74,7 +74,11 @@ def get_tags(sequence):
     starts = []
     k = []
     for linker in _linkers:  # align the two linkers
-        alignment = _local_aligner(sequence, linker, -2, -1)[0]
+        try:
+            alignment = _local_aligner(sequence, linker, -2, -1)[0]
+        except IndexError:
+            starts.append(None)
+            continue
         seqA, seqB, score, begin, end = alignment
         length = end - begin
         if length == 15 and score >= 14:
@@ -288,7 +292,7 @@ def parse_args():
     parser.add_argument("--subset", type=int,
         help="Select a lower number of reads to analyze [debugging]")
 
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 0.9.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.0.0')
 
     args = parser.parse_args()
 
