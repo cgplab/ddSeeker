@@ -1,3 +1,7 @@
 __pycache__/
 test*/
 pipelines/
+bin/
+lib/
+share/
+fastq

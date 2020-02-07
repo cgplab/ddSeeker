@@ -18,6 +18,21 @@ from re import match as re_match
 logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S',
                     format="[%(asctime)s] %(levelname)s - %(message)s")
 _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
+_barcodes = ["AAAGAA", "AACAGC", "AACGTG", "AAGCCA", "AAGTAT", "AATTGG",
+        "ACAAGG", "ACCCAA", "ACCTTC", "ACGGAC", "ACTGCA", "AGACCC", "AGATGT",
+        "AGCACG", "AGGTTA", "AGTAAA", "AGTCTG", "ATACTT", "ATAGCG", "ATATAC",
+        "ATCCGG", "ATGAAG", "ATTAGT", "CAACCG", "CAAGTC", "CACCAC", "CACTGT",
+        "CAGACT", "CAGGAG", "CATAGA", "CCACGC", "CCGATG", "CCGTAA", "CCTCTA",
+        "CGAAAG", "CGAGCA", "CGCATA", "CGGCGT", "CGGTCC", "CGTTAT", "CTAGGT",
+        "CTATTA", "CTCAAT", "CTGTGG", "CTTACG", "CTTGAA", "GAAATA", "GAAGGG",
+        "GACTCG", "GAGCTT", "GAGGCC", "GAGTGA", "GATCAA", "GCCAGA", "GCCGTT",
+        "GCGAAT", "GCGCGG", "GCTCCC", "GCTGAG", "GCTTGT", "GGACGA", "GGATTG",
+        "GGCCAT", "GGGATC", "GGTAGG", "GGTGCT", "GTACAG", "GTCCTA", "GTCGGC",
+        "GTGGTG", "GTTAAC", "GTTTCA", "TAAGCT", "TAATAG", "TACCGA", "TAGAGG",
+        "TATTTC", "TCAGTG", "TCATCA", "TCCAAG", "TCGCCT", "TCGGGA", "TCTAGC",
+        "TGAATT", "TGAGAC", "TGCGGT", "TGCTAA", "TGGCAG", "TGTGTA", "TGTTCG",
+        "TTAAGA", "TTCGCA", "TTCTTG", "TTGCTC", "TTGGAT", "TTTGGG"]
+
 _local_aligner = partial(pairwise2.align.localxs, one_alignment_only=True)
 _global_aligner = partial(pairwise2.align.globalxs, score_only=True, one_alignment_only=True)
 
@@ -99,7 +114,6 @@ def get_tags(sequence):
             k.append(1)
         else:
             starts.append(None)
-            k.append(None)
 
     if not starts[0] and not starts[1]:
         return(dict([(_tag_error, "LX")])) # no linker aligned
@@ -184,10 +198,8 @@ def write_summary(summary_path):
     out.close()
 
     file_name = summary_path + ".cell_barcodes.csv"
-    sorted_barcodes = sorted(_cell_count, key=lambda x: _cell_count[x],
-            reverse=True)
-    cell_cumsum = cumsum([_cell_count[b] for b in sorted_barcodes]) / \
-            sum(_cell_count.values())
+    sorted_barcodes = sorted(_cell_count, key=lambda x: _cell_count[x], reverse=True)
+    cell_cumsum = cumsum([_cell_count[b] for b in sorted_barcodes])/sum(_cell_count.values())
     out = open(file_name, "w")
     out.write("Cell_Barcode\tCount\tCumulative_Sum\n")
     for i, barcode in enumerate(sorted_barcodes):
@@ -225,6 +237,7 @@ def main():
 
     logging.info("Extracting tags.")
     pool = Pool(args.cores)
+
     for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1), 1):
         if (i) % 1e6 == 0:
             logging.info("{} reads processed.".format(str(i)))
@@ -292,13 +305,9 @@ def parse_args():
     parser.add_argument("--subset", type=int,
         help="Select a lower number of reads to analyze [debugging]")
 
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.0.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.1.0')
 
     args = parser.parse_args()
-
-    global _barcodes
-    barcodes_file = Path(sys.argv[0]).resolve().parent.joinpath("barcodes.txt")
-    _barcodes = barcodes_file.open().read().split()
 
     # check parameters
     if not (args.tag_bc != args.tag_umi != args.tag_error != args.tag_bc):
