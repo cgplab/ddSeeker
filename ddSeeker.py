@@ -15,8 +15,7 @@ from numpy import cumsum
 from pathlib import Path
 from re import match as re_match
 
-logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S',
-                    format="[%(asctime)s] %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, datefmt='%H:%M:%S', format="[%(asctime)s] %(levelname)s - %(message)s")
 _linkers = ["TAGCCATCGCATTGC", "TACCTCTGAGCTGAA"]
 _barcodes = ["AAAGAA", "AACAGC", "AACGTG", "AAGCCA", "AAGTAT", "AATTGG",
         "ACAAGG", "ACCCAA", "ACCTTC", "ACGGAC", "ACTGCA", "AGACCC", "AGATGT",
@@ -86,59 +85,63 @@ def get_tags(sequence):
     B = one BC with more than 1 mismatch"""
 
     sequence = sequence.upper()
-    starts = []
+    linker_start_index = []
     k = []
-    for linker in _linkers:  # align the two linkers
+    # find the start of the 2 linker sequences, allowing 1 edit distance (mismatch, indel)
+    for linker in _linkers:
         try:
             alignment = _local_aligner(sequence, linker, -2, -1)[0]
         except IndexError:
-            starts.append(None)
+            linker_start_index.append(None)
             continue
         seqA, seqB, score, begin, end = alignment
         length = end - begin
         if length == 15 and score >= 14:
             # 0-1 mismatch
-            starts.append(begin)
+            linker_start_index.append(begin)
             k.append(0)
         elif length == 14 and score == 14:
             # 1 mismatch at starting position
-            starts.append(begin - 1)
+            linker_start_index.append(begin - 1)
             k.append(0)
         elif "-" in seqA[begin:end] and length == 15 and score == 12:
             # 1 deletion
-            starts.append(begin)
+            linker_start_index.append(begin)
             k.append(-1)
         elif "-" in seqB and length == 16 and score == 13:
             # 1 insertion
-            starts.append(begin)
+            linker_start_index.append(begin)
             k.append(1)
         else:
-            starts.append(None)
+            linker_start_index.append(None)
 
-    if not starts[0] and not starts[1]:
+    if linker_start_index[0] is None and linker_start_index[1] is None:
         return(dict([(_tag_error, "LX")])) # no linker aligned
-    elif not starts[0]:
+    elif linker_start_index[0] is None:
         return(dict([(_tag_error, "L1")])) # linker 1 not aligned
-    elif not starts[1]:
+    elif linker_start_index[1] is None:
         return(dict([(_tag_error, "L2")])) # linker 2 not aligned
 
-    if starts[1]-starts[0] == 21+k[0]:
-        bc2 = sequence[starts[1]-6: starts[1]]
-    elif starts[1]-starts[0] == 20+k[0]: # 1 deletion in bc2
-        bc2 = sequence[starts[1]-5: starts[1]]
-    elif starts[1]-starts[0] == 22+k[0]: # 1 insertion in bc2
-        bc2 = sequence[starts[1]-7: starts[1]]
+    # extract block 2 if the distance between the linker blocks is equal to 21 (+/- 1 indel)
+    if linker_start_index[1]-linker_start_index[0] == 21+k[0]:
+        bc2 = sequence[linker_start_index[1]-6: linker_start_index[1]]
+    elif linker_start_index[1]-linker_start_index[0] == 20+k[0]: # 1 deletion in bc2
+        bc2 = sequence[linker_start_index[1]-5: linker_start_index[1]]
+    elif linker_start_index[1]-linker_start_index[0] == 22+k[0]: # 1 insertion in bc2
+        bc2 = sequence[linker_start_index[1]-7: linker_start_index[1]]
     else:
         return(dict([(_tag_error, "I")]))
 
-    if starts[0] < 5:
+    # extract block 1 if the length of block 1 is greater than or equal to 5 bases
+    if linker_start_index[0] < 5:
         return(dict([(_tag_error, "D")]))
-    elif starts[0] == 5:
-        bc1 = sequence[: starts[0]]
+    elif linker_start_index[0] == 5:
+        bc1 = sequence[: linker_start_index[0]]
     else:
-        bc1 = sequence[starts[0]-6: starts[0]]
+        bc1 = sequence[linker_start_index[0]-6: linker_start_index[0]]
 
-    acg = sequence[starts[1]+21+k[1]: starts[1]+24+k[1]]
+    # extract ACG block and check the sequence
+    acg = sequence[linker_start_index[1]+21+k[1]: linker_start_index[1]+24+k[1]]
     i = 0
     thr = 0
     while i < len(acg) and thr <= 1:
@@ -148,7 +151,6 @@ def get_tags(sequence):
     else:
         if thr > 1:
             return(dict([(_tag_error, "J")]))
-
     try:
         dist_acg = hamming_dist(acg, "ACG")
     except ValueError:
@@ -156,7 +158,8 @@ def get_tags(sequence):
     if dist_acg > 1:
         return(dict([(_tag_error, "J")]))
 
-    gac = sequence[starts[1]+32+k[1]: starts[1]+35+k[1]]
+    # extract GAC block and check the sequence
+    gac = sequence[linker_start_index[1]+32+k[1]: linker_start_index[1]+35+k[1]]
     try:
         dist_gac = hamming_dist(gac, "GAC")
     except ValueError:
@@ -164,8 +167,10 @@ def get_tags(sequence):
     if dist_gac > 1:
         return(dict([(_tag_error, "K")]))
 
-    bc3 = sequence[starts[1]+15+k[1]: starts[1]+21+k[1]]
+    # extract block 3
+    bc3 = sequence[linker_start_index[1]+15+k[1]: linker_start_index[1]+21+k[1]]
 
+    # correct blocks 1,2,3 and compose cell barcode
     barcode = []
     for block in (bc1, bc2, bc3):
         fixed = fix_block(block)
@@ -174,7 +179,9 @@ def get_tags(sequence):
         else:
             return(dict([(_tag_error, "B")]))
 
-    umi = sequence[starts[1]+24+k[1]: starts[1]+32+k[1]]
+    # extract Unique Molecula Identifier (UMI)
+    umi = sequence[linker_start_index[1]+24+k[1]: linker_start_index[1]+32+k[1]]
+    umi_quality = quality[linker_start_index[1]+24+k[1]: linker_start_index[1]+32+k[1]]
 
     return(dict([(_tag_bc, "".join(barcode)), (_tag_umi, umi)]))
 
