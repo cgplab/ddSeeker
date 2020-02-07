@@ -67,7 +67,7 @@ def fix_block(block):
     else:
         return(None)
 
-def get_tags(sequence):
+def get_tags(record):
     """Extract barcodes from R1 and return a tuple of SAM-format TAGs.
     Default tag values:
     - XC = cell barcode
@@ -84,7 +84,8 @@ def get_tags(sequence):
     K = indel in UMI or GAC trinucleotide
     B = one BC with more than 1 mismatch"""
 
-    sequence = sequence.upper()
+    sequence = record[1].upper()
+    quality = record[2]
     linker_start_index = []
     k = []
     # find the start of the 2 linker sequences, allowing 1 edit distance (mismatch, indel)
@@ -125,10 +126,13 @@ def get_tags(sequence):
     # extract block 2 if the distance between the linker blocks is equal to 21 (+/- 1 indel)
     if linker_start_index[1]-linker_start_index[0] == 21+k[0]:
         bc2 = sequence[linker_start_index[1]-6: linker_start_index[1]]
+        bc2_q = quality[linker_start_index[1]-6: linker_start_index[1]]
     elif linker_start_index[1]-linker_start_index[0] == 20+k[0]: # 1 deletion in bc2
         bc2 = sequence[linker_start_index[1]-5: linker_start_index[1]]
+        bc2_q = sequence[linker_start_index[1]-5: linker_start_index[1]]
     elif linker_start_index[1]-linker_start_index[0] == 22+k[0]: # 1 insertion in bc2
         bc2 = sequence[linker_start_index[1]-7: linker_start_index[1]]
+        bc2_q = quality[linker_start_index[1]-7: linker_start_index[1]]
     else:
         return(dict([(_tag_error, "I")]))
 
@@ -137,8 +141,10 @@ def get_tags(sequence):
         return(dict([(_tag_error, "D")]))
     elif linker_start_index[0] == 5:
         bc1 = sequence[: linker_start_index[0]]
+        bc1_q = quality[: linker_start_index[0]]
     else:
         bc1 = sequence[linker_start_index[0]-6: linker_start_index[0]]
+        bc1_q = quality[linker_start_index[0]-6: linker_start_index[0]]
 
     # extract ACG block and check the sequence
     acg = sequence[linker_start_index[1]+21+k[1]: linker_start_index[1]+24+k[1]]
@@ -169,6 +175,7 @@ def get_tags(sequence):
 
     # extract block 3
     bc3 = sequence[linker_start_index[1]+15+k[1]: linker_start_index[1]+21+k[1]]
+    bc3_q = quality[linker_start_index[1]+15+k[1]: linker_start_index[1]+21+k[1]]
 
     # correct blocks 1,2,3 and compose cell barcode
     barcode = []
@@ -178,12 +185,15 @@ def get_tags(sequence):
             barcode.append(fixed)
         else:
             return(dict([(_tag_error, "B")]))
+    barcode = "".join(barcode)
+    barcode_q = "".join([bc1_q, bc2_q, bc3_q])
 
     # extract Unique Molecula Identifier (UMI)
     umi = sequence[linker_start_index[1]+24+k[1]: linker_start_index[1]+32+k[1]]
-    umi_quality = quality[linker_start_index[1]+24+k[1]: linker_start_index[1]+32+k[1]]
+    umi_q = quality[linker_start_index[1]+24+k[1]: linker_start_index[1]+32+k[1]]
 
-    return(dict([(_tag_bc, "".join(barcode)), (_tag_umi, umi)]))
+    #  print(dict([(_tag_bc, barcode), (_tag_umi, umi), (_tag_umi_q, umi_q), (_tag_bc_q, barcode_q)]))
+    return(dict([(_tag_bc, barcode), (_tag_umi, umi), (_tag_umi_q, umi_q), (_tag_bc_q, barcode_q)]))
 
 def compute_summary(tags):
     # summary statistics
@@ -218,10 +228,14 @@ def main():
     args = parse_args()
 
     global _tag_bc
+    global _tag_bc_q
     global _tag_umi
+    global _tag_umi_q
     global _tag_error
     _tag_bc    = args.tag_bc
+    _tag_bc_q  = args.tag_bc_q
     _tag_umi   = args.tag_umi
+    _tag_umi_q = args.tag_umi_q
     _tag_error = args.tag_error
 
     bam_write_mode = "w" if args.output == "-" else "wb"
@@ -229,11 +243,11 @@ def main():
 
     # Processing ####
     _start = time.perf_counter()
-    in_seqs1 = (seq for head, seq, qual in FastqGeneralIterator(gzopen(in_filename1, "rt")))
+    in_reads1 = (record for record in FastqGeneralIterator(gzopen(in_filename1, "rt")))
     in_reads2 = (record for record in FastqGeneralIterator(gzopen(in_filename2, "rt")))
 
     if args.subset: # DEBUGGING PURPOSES
-        in_seqs1 = islice(in_seqs1, args.subset)
+        in_reads1 = islice(in_reads1, args.subset)
 
     if args.pipeline == "dropseq":
         bam_header = {'HD':{'VN': '1.6', 'SO':'unknown'}}
@@ -245,7 +259,7 @@ def main():
     logging.info("Extracting tags.")
     pool = Pool(args.cores)
 
-    for (i, tags) in enumerate(pool.imap(get_tags, in_seqs1), 1):
+    for (i, tags) in enumerate(pool.imap(get_tags, in_reads1), 1):
         if (i) % 1e6 == 0:
             logging.info("{} reads processed.".format(str(i)))
         if args.pipeline == "dropseq":
@@ -303,8 +317,14 @@ def parse_args():
     parser.add_argument("--tag-bc", type=str, default="XC",
         help="Tag for single cell barcode (default=XC)")
 
+    parser.add_argument("--tag-bc-q", type=str, default="XQ",
+        help="Tag for single cell barcode base quality (default=XQ)")
+
     parser.add_argument("--tag-umi", type=str, default="XM",
         help="Tag for Unique Molecular Identifier (default=XM)")
+
+    parser.add_argument("--tag-umi-q", type=str, default="Xq",
+        help="Tag for Unique Molecular Identifier base quality (default=Xq)")
 
     parser.add_argument("--tag-error", type=str, default="XE",
         help="Tag for errors (default=XE)")
@@ -312,7 +332,7 @@ def parse_args():
     parser.add_argument("--subset", type=int,
         help="Select a lower number of reads to analyze [debugging]")
 
-    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.1.0')
+    parser.add_argument("-v", '--version', action='version', version='%(prog)s 1.2.0')
 
     args = parser.parse_args()
 

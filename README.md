@@ -26,7 +26,7 @@ Users can manually set different tags (see [Additional options](https://github.c
 ## Additional options
 
   - Increment number of CPU units (faster analysis) with `-c/--cores`.
-  - Manually set tags with `--tag-bc`, `--tag-umi` and `--tag-error`.
+  - Manually set tags with `--tag-bc`, `--tag-umi`, `--tag-bc-q`, `--tag-umi-q`, `--tag-error`.
   - Print uncompressed SAM file to standard output (allowing direct feeding to other tools for
     filtering, sorting etc.) with `-o/--output -` (note the `-` sign).
   - Generate two csv files reporting the number of reads per cell and the distribution
@@ -115,12 +115,3 @@ Sanctis V, Di Leo A, Migliaccio I, Malorni L, Benelli M. *ddSeeker: a tool for
 processing Bio-Rad ddSEQ single cell RNA-seq data*. BMC Genomics. 2018; 19:960
 
 Link to the paper: [ddSeeker: a tool for processing Bio-Rad ddSEQ single cell RNA-seq data](https://rdcu.be/bekqj)
-
-
-## Update (2019-03-22): split bam files
-While performing further analyses on our scRNA-seq data, we had the need to
-create separate bam files for each single cell. 
-We wrote a script (`split_bam.py`) to perform this simple but not trivial task
-and we are sharing it here with the community.
-Requires [simplesam](https://github.com/mdshw5/simplesam).
-
