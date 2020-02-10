@@ -8,9 +8,16 @@
 **Output**: one unmapped BAM ([uBAM](https://gatkforums.broadinstitute.org/gatk/discussion/11008/ubam-unmapped-bam-format))
 file containing reads tagged with cell barcodes and Unique Molecular Identifiers (UMI).
 Default [tags](https://genome.sph.umich.edu/wiki/SAM#What_are_TAGs.3F) are
-**XC** and **XM** for cell barcodes and UMI, and **XE** for errors related to
-the barcode identification.
+**XC** and **XM** for cell barcodes and UMI, **XE** for errors related to
+the barcode identification, and XQ and Xq for base quality of cell barcode and UMI respectively[^1].
 Users can manually set different tags (see [Additional options](https://github.com/cgplab/ddSeeker#additional-options)).
+
+[^1]: Know issue. The cell barcode is composed by three shorter blocks and if
+  any of the block is affected by and indel event it may be difficult to
+  determine which base was inserted/deleted (although each block is fixed by
+  comparing it to a list of available blocks). Therefore, the quality string of
+  the cell barcode may differ in length with respect to the proper cell barcode
+  by one base: it still gives a general view of the quality of the barcode.
 
 ### Errors in barcode identification
 
