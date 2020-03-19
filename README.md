@@ -101,9 +101,9 @@ Table of Counts can be obtained using the `DigitalExpression` tool included in D
 #### scPipe
 scPipe requires one FASTQ file with cell barcodes and UMIs stored in the header
 of each read record. To change the output of **ddSeeker** use the option
-`--pipeline scPipe`.
+`--pipeline scpipe`.
 
-    ddSeeker.py -i sampleA_R* -o sampleA_tagged.fastq.gz -c 20 --pipeline scPipe
+    ddSeeker.py -i <read1.fastq.gz> <read2.fast.gz> -o <tagged_reads.fastq.gz -c 20 --pipeline scpipe
 
 In addition, set `bc_len=18` and `UMI_len=8` with the `sc_exon_mapping()` function.
 
